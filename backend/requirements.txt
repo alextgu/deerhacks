@@ -8,3 +8,10 @@ pydantic_core==2.41.5
 starlette==0.52.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+google-genai
+python-dotenv
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+google-genai

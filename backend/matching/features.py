@@ -582,27 +582,14 @@ def growth_diff(vector_past: dict, vector_now: dict,
 # 8. GROUP MATCH — optimal hackathon team of 4
 # ═════════════════════════════════════════════════════════════════════════════
 
-def group_match(vectors: list[dict], names: list[str]) -> dict:
+def group_match(vectors: list[dict], names: list[str], team_size: int = 4) -> dict:
     """
-    Given a pool of people, find the optimal 4-person hackathon team.
+    Given a pool of people, find the optimal team of `team_size` people.
     Scores teams on: pairwise compatibility average + role coverage bonus.
-
-    Returns:
-        {
-            optimal_team: [name, name, name, name],
-            team_score:   float,
-            pairwise_scores: {"{nameA} x {nameB}": score},
-            coverage_analysis: {
-                dimension: {best_person: name, score: float}
-            },
-            coverage_gaps: [dimension],   # dims where team avg < 0.45
-            coverage_strengths: [dimension],
-            runner_up_teams: [  # top 3 alternatives
-                {members: [names], score: float}
-            ]
-        }
+    team_size can be any integer >= 2 (default 4).
     """
-    assert len(vectors) >= 4, "Need at least 4 people to form a team"
+    assert team_size >= 2, "team_size must be at least 2"
+    assert len(vectors) >= team_size, f"Need at least {team_size} people in the pool"
     assert len(vectors) == len(names)
 
     pool = list(zip(names, vectors))
@@ -644,8 +631,8 @@ def group_match(vectors: list[dict], names: list[str]) -> dict:
 
         return round(avg_pairwise + coverage_bonus, 4)
 
-    # Score all combinations of 4
-    all_combos = list(combinations(pool, 4))
+    # Score all combinations of team_size
+    all_combos = list(combinations(pool, team_size))
     scored = [(combo, team_score(list(combo))) for combo in all_combos]
     scored.sort(key=lambda x: x[1], reverse=True)
 
@@ -655,7 +642,7 @@ def group_match(vectors: list[dict], names: list[str]) -> dict:
 
     # Pairwise breakdown for the best team
     pairwise = {}
-    for i, j in combinations(range(4), 2):
+    for i, j in combinations(range(team_size), 2):
         key = f"{best_names[i]} × {best_names[j]}"
         result = compute_match(best_vectors[i], best_vectors[j], "hackathon")
         pairwise[key] = result.score
@@ -664,7 +651,7 @@ def group_match(vectors: list[dict], names: list[str]) -> dict:
     coverage = {}
     for dim, vars_ in DIMENSIONS.items():
         best_person_idx = max(
-            range(4),
+            range(team_size),
             key=lambda i: sum(best_vectors[i]["scores"].get(v, 0.5) for v in vars_) / len(vars_)
         )
         dim_score_val = sum(best_vectors[best_person_idx]["scores"].get(v, 0.5) for v in vars_) / len(vars_)
@@ -674,7 +661,7 @@ def group_match(vectors: list[dict], names: list[str]) -> dict:
         dim: round(sum(
             sum(v["scores"].get(var, 0.5) for var in vars_) / len(vars_)
             for v in best_vectors
-        ) / 4, 3)
+) / team_size, 3)
         for dim, vars_ in DIMENSIONS.items()
     }
     gaps      = [d for d, avg in team_dim_avgs.items() if avg < 0.45]
