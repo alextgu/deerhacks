@@ -1,0 +1,544 @@
+{
+  "address": "CEEGzYZPhBMWV49o1PCR8N7Y6CTuSjQs9sM7AFs4afgW",
+  "metadata": {
+    "name": "solana_program",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "award_karma",
+      "discriminator": [
+        43,
+        155,
+        85,
+        87,
+        19,
+        93,
+        107,
+        5
+      ],
+      "accounts": [
+        {
+          "name": "rater_identity",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  45,
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "rater"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rater",
+          "signer": true
+        },
+        {
+          "name": "recipient_identity",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  45,
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "recipient_identity.authority",
+                "account": "UserIdentity"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "rating",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "endorse_skill",
+      "discriminator": [
+        99,
+        171,
+        125,
+        235,
+        139,
+        212,
+        177,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "endorser",
+          "signer": true
+        },
+        {
+          "name": "recipient_identity",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  45,
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "recipient_identity.authority",
+                "account": "UserIdentity"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "skill_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "initialize_config",
+      "docs": [
+        "One-time setup: set the backend authority that may call penalize_abandonment."
+      ],
+      "discriminator": [
+        208,
+        127,
+        21,
+        1,
+        194,
+        190,
+        196,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "initialize_user",
+      "discriminator": [
+        111,
+        17,
+        185,
+        250,
+        60,
+        122,
+        38,
+        254
+      ],
+      "accounts": [
+        {
+          "name": "user_identity",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  45,
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "signer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "archetype",
+          "type": "string"
+        },
+        {
+          "name": "skill_weights",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "SkillWeight"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "penalize_abandonment",
+      "docs": [
+        "Called by the backend authority when a user abandons a match without",
+        "completing or rating it. Deducts karma and increments the abandonment",
+        "counter. Once the counter exceeds the threshold the account is flagged,",
+        "signalling the matching algorithm to deprioritize or block this user."
+      ],
+      "discriminator": [
+        225,
+        159,
+        162,
+        77,
+        93,
+        143,
+        79,
+        40
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Backend authority keypair — must match config.authority."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_identity",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  45,
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user_identity.authority",
+                "account": "UserIdentity"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "ProgramConfig",
+      "discriminator": [
+        196,
+        210,
+        90,
+        231,
+        144,
+        149,
+        140,
+        63
+      ]
+    },
+    {
+      "name": "UserIdentity",
+      "discriminator": [
+        183,
+        60,
+        180,
+        168,
+        67,
+        237,
+        196,
+        96
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "ArchetypeTooLong",
+      "msg": "Archetype label exceeds maximum length"
+    },
+    {
+      "code": 6001,
+      "name": "TooManySkills",
+      "msg": "Too many skills provided"
+    },
+    {
+      "code": 6002,
+      "name": "SkillNameTooLong",
+      "msg": "Skill name exceeds maximum length"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidRating",
+      "msg": "Rating must be between 1 and 5"
+    },
+    {
+      "code": 6004,
+      "name": "CannotRateSelf",
+      "msg": "Cannot rate yourself"
+    },
+    {
+      "code": 6005,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6006,
+      "name": "SkillNotFound",
+      "msg": "Skill not found on recipient's account"
+    },
+    {
+      "code": 6007,
+      "name": "AlreadyEndorsed",
+      "msg": "This skill has already been endorsed by this user"
+    },
+    {
+      "code": 6008,
+      "name": "TooManyEndorsements",
+      "msg": "Maximum number of endorsements reached"
+    },
+    {
+      "code": 6009,
+      "name": "CannotEndorseSelf",
+      "msg": "Cannot endorse yourself"
+    },
+    {
+      "code": 6010,
+      "name": "Unauthorized",
+      "msg": "Only the program authority may call this instruction"
+    }
+  ],
+  "types": [
+    {
+      "name": "Endorsement",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "endorser",
+            "type": "pubkey"
+          },
+          {
+            "name": "skill",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProgramConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SkillWeight",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "weight",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserIdentity",
+      "docs": [
+        "Soulbound (non-transferable) identity account.",
+        "Derived as a PDA from the owner's wallet — no transfer instruction exists,",
+        "so the identity is permanently bound to the creating wallet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "archetype",
+            "type": "string"
+          },
+          {
+            "name": "skill_weights",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "SkillWeight"
+                }
+              }
+            }
+          },
+          {
+            "name": "karma",
+            "type": "u64"
+          },
+          {
+            "name": "endorsements",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Endorsement"
+                }
+              }
+            }
+          },
+          {
+            "name": "abandonment_count",
+            "type": "u8"
+          },
+          {
+            "name": "is_flagged",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}

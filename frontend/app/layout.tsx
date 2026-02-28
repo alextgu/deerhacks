@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Auth0Provider } from "@auth0/nextjs-auth0/client";
 import { auth0 } from "@/lib/auth0";
+import { SolanaProvider } from "@/components/solana-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,7 +32,9 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Auth0Provider user={session?.user}>{children}</Auth0Provider>
+        <Auth0Provider user={session?.user}>
+          <SolanaProvider>{children}</SolanaProvider>
+        </Auth0Provider>
       </body>
     </html>
   );
