@@ -5,6 +5,13 @@ import type { Auth0UserWithName } from "@/lib/user-display";
 
 export async function POST() {
   try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { error: "Supabase not configured (missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)" },
+        { status: 503 }
+      );
+    }
+
     const session = await auth0.getSession();
     if (!session?.user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -14,6 +21,10 @@ export async function POST() {
     const { sub, email, name, picture } = u;
     const givenName = u.given_name ?? null;
     const familyName = u.family_name ?? null;
+
+    if (!sub) {
+      return NextResponse.json({ error: "Auth0 user has no sub" }, { status: 400 });
+    }
 
     const { data, error } = await supabaseAdmin
       .from("profiles")
