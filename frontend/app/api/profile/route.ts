@@ -12,11 +12,14 @@ export async function GET() {
 
     const { data, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, email, name, first_name, last_name, avatar_url, wallet_address, sol_balance, karma_score")
+      .select("*")
       .eq("id", session.user.sub)
       .single();
 
     if (error) {
+      if (error.code === "PGRST116") {
+        return NextResponse.json({ profile: null });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

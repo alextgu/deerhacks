@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 type Message = {
   id: string;
@@ -13,18 +14,16 @@ type Message = {
 type ChatPanelProps = {
   matchId: string;
   currentUserId: string;
+  matchBlurb?: string | null;
 };
 
-const POLL_INTERVAL = 2000;
-
-export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
+export function ChatPanel({ matchId, currentUserId, matchBlurb }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listEndRef = useRef<HTMLDivElement>(null);
-  const latestTimestamp = useRef<string | undefined>(undefined);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(
@@ -33,28 +32,17 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
     );
   }, []);
 
-  const fetchMessages = useCallback(
-    async (after?: string): Promise<Message[]> => {
-      const url = `/api/chat/${matchId}/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to load messages");
-      const { messages: msgs } = await res.json();
-      return msgs as Message[];
-    },
-    [matchId]
-  );
-
+  // Initial fetch via REST (gets full history)
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
       try {
-        const msgs = await fetchMessages();
+        const res = await fetch(`/api/chat/${matchId}/messages`);
+        if (!res.ok) throw new Error("Failed to load messages");
+        const { messages: msgs } = await res.json();
         if (cancelled) return;
-        setMessages(msgs);
-        if (msgs.length > 0) {
-          latestTimestamp.current = msgs[msgs.length - 1].created_at;
-        }
+        setMessages(msgs as Message[]);
         scrollToBottom();
       } catch (e) {
         if (!cancelled)
@@ -65,28 +53,30 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
     }
 
     init();
+    return () => { cancelled = true; };
+  }, [matchId, scrollToBottom]);
 
-    const interval = setInterval(async () => {
-      if (cancelled) return;
-      try {
-        const newMsgs = await fetchMessages(latestTimestamp.current);
-        if (cancelled || newMsgs.length === 0) return;
-        setMessages((curr) => {
-          const existingIds = new Set(curr.map((m) => m.id));
-          const fresh = newMsgs.filter((m) => !existingIds.has(m.id));
-          if (fresh.length === 0) return curr;
-          return [...curr, ...fresh];
+  // Supabase Realtime — subscribe to broadcast channel scoped to match_id
+  useEffect(() => {
+    const channel = supabase.channel(`chat:${matchId}`, {
+      config: { broadcast: { self: false } },
+    });
+
+    channel
+      .on("broadcast", { event: "new_message" }, (payload) => {
+        const msg = payload.payload as Message;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
         });
-        latestTimestamp.current = newMsgs[newMsgs.length - 1].created_at;
         scrollToBottom();
-      } catch {}
-    }, POLL_INTERVAL);
+      })
+      .subscribe();
 
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      supabase.removeChannel(channel);
     };
-  }, [matchId, fetchMessages, scrollToBottom]);
+  }, [matchId, scrollToBottom]);
 
   async function handleSend() {
     const text = input.trim();
@@ -109,12 +99,21 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
       }
 
       const { message } = await res.json();
+
       setMessages((prev) => {
         if (prev.some((m) => m.id === message.id)) return prev;
         return [...prev, message];
       });
-      latestTimestamp.current = message.created_at;
       scrollToBottom();
+
+      // Broadcast to the other participant via Supabase Realtime
+      const channel = supabase.channel(`chat:${matchId}`);
+      await channel.send({
+        type: "broadcast",
+        event: "new_message",
+        payload: message,
+      });
+      supabase.removeChannel(channel);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Send failed");
     } finally {
@@ -140,6 +139,17 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
 
   return (
     <div className="flex flex-1 flex-col rounded-lg border border-border bg-card">
+      {/* Icebreaker blurb — always visible at top */}
+      {matchBlurb && (
+        <div className="border-b border-border bg-muted-30 px-4 py-3">
+          <p className="text-xs font-medium text-muted-foreground" style={{ marginBottom: "0.25rem" }}>
+            Why you two should connect
+          </p>
+          <p className="text-sm text-foreground">{matchBlurb}</p>
+        </div>
+      )}
+
+      {/* Messages */}
       <div className="flex flex-1 flex-col overflow-y-auto p-3">
         {messages.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
@@ -167,6 +177,8 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
         })}
         <div ref={listEndRef} />
       </div>
+
+      {/* Input */}
       <div className="flex gap-2 border-t border-border p-3">
         <input
           type="text"

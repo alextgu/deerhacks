@@ -39,14 +39,25 @@ from features import (
     relationship_type,
     opening_message,
 )
-from vector_extraction import run_pipeline
+from vector_extraction import run_pipeline, extract_user_messages, scrub_pii, build_corpus
 from matching import compute_match, result_to_dict
 from matching_engine import (
     get_matches as snowflake_get_matches,
+    get_matches_cortex as snowflake_get_matches_cortex,
     get_group_match as snowflake_get_group_match,
     upsert_archetype,
+    upsert_raw_corpus,
+    embed_and_upsert_archetype,
     increment_abandonment,
 )
+
+# Optional: Solana minting helpers (graceful if solders not installed)
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "workers"))
+    from solana_mint import mint_soulbound_identity, check_identity_exists
+    SOLANA_ENABLED = True
+except (ImportError, Exception):
+    SOLANA_ENABLED = False
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -124,12 +135,13 @@ class QuizPayload(BaseModel):
 
 
 class SnowflakeMatchPayload(BaseModel):
-    user_id: str
-    vector: dict
+    user_id: str  # auth0_id when use_cortex=True
+    vector: Optional[dict] = None  # optional when use_cortex=True
     context: str = "hackathon"
     server_id: str = "hackathon"
     top_n: int = 10
     include_blurbs: bool = False
+    use_cortex: bool = False  # use Snowflake Cortex Search (768-dim) for vector comparison
 
 class SnowflakeGroupPayload(BaseModel):
     server_id: str
@@ -160,18 +172,133 @@ def health():
     }
 
 
-# ── 1. EXTRACT VECTOR FROM GOOGLE TAKEOUT ────────────────────────────────────
+# ── 1. EXTRACT & INGEST GOOGLE TAKEOUT ────────────────────────────────────
+
+class ExtractPayload(BaseModel):
+    user_id: str
+    server_id: str = "general"
 
 @app.post("/extract")
-async def extract_vector(file: UploadFile = File(...)):
+async def extract_and_ingest(
+    file: UploadFile = File(...),
+    user_id: str = "anonymous",
+    server_id: str = "general",
+    wallet_address: Optional[str] = None,
+):
     """
     Upload a Google Takeout Gemini JSON file.
-    Returns the 50-variable personality vector.
+    Parses, scrubs PII, stores the cleaned corpus in Snowflake
+    raw_user_onboarding, then generates a 768-dim embedding via
+    SNOWFLAKE.CORTEX.EMBED_TEXT_768 and upserts into user_archetypes.
+
+    If wallet_address is provided and Solana is enabled, returns the
+    instruction data needed to mint a Soulbound UserIdentity on-chain.
+    """
+    tmp_path = f"/tmp/{file.filename}"
+    contents = await file.read()
+    with open(tmp_path, "wb") as f:
+        f.write(contents)
+
+    try:
+        messages = extract_user_messages(tmp_path)
+        if not messages:
+            raise HTTPException(status_code=400, detail="No user messages found in file")
+
+        for m in messages:
+            m["message"] = scrub_pii(m["message"])
+
+        cleaned_corpus = build_corpus(messages, max_chars=40000)
+        message_count = len(messages)
+
+        upsert_raw_corpus(user_id, cleaned_corpus)
+        embed_and_upsert_archetype(user_id, server_id)
+
+        result = {
+            "success": True,
+            "message_count": message_count,
+            "corpus_length": len(cleaned_corpus),
+            "user_id": user_id,
+            "server_id": server_id,
+        }
+
+        if wallet_address and SOLANA_ENABLED:
+            try:
+                already_minted = check_identity_exists(wallet_address)
+                if not already_minted:
+                    mint_data = mint_soulbound_identity(
+                        user_wallet_pubkey=wallet_address,
+                        archetype_label="Analyzed Persona",
+                        skill_weights=[],
+                    )
+                    result["soulbound_mint"] = mint_data
+                else:
+                    result["soulbound_mint"] = {"status": "already_exists"}
+            except Exception as e:
+                result["soulbound_mint"] = {"status": "error", "detail": str(e)}
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+# ── 1b. SOULBOUND IDENTITY MINTING ────────────────────────────────────────
+
+class MintPayload(BaseModel):
+    wallet_address: str
+    archetype_label: str = "Analyzed Persona"
+    skill_weights: list[dict] = []
+
+@app.post("/soulbound/prepare")
+def prepare_soulbound(payload: MintPayload):
+    """
+    Prepare the Anchor instruction data for minting a Soulbound UserIdentity.
+    The frontend's wallet adapter signs and submits the transaction.
+    Returns the base64 instruction data, program ID, and account metas.
+    """
+    if not SOLANA_ENABLED:
+        raise HTTPException(status_code=503, detail="Solana minting not available (solders not installed)")
+
+    try:
+        already = check_identity_exists(payload.wallet_address)
+        if already:
+            return {"status": "already_exists", "wallet": payload.wallet_address}
+
+        mint_data = mint_soulbound_identity(
+            user_wallet_pubkey=payload.wallet_address,
+            archetype_label=payload.archetype_label,
+            skill_weights=payload.skill_weights,
+        )
+        return {"status": "ready", **mint_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/soulbound/check/{wallet_address}")
+def check_soulbound(wallet_address: str):
+    """Check if a Soulbound UserIdentity already exists for this wallet."""
+    if not SOLANA_ENABLED:
+        raise HTTPException(status_code=503, detail="Solana minting not available")
+    try:
+        exists = check_identity_exists(wallet_address)
+        return {"exists": exists, "wallet": wallet_address}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/extract/legacy")
+async def extract_vector_legacy(file: UploadFile = File(...)):
+    """
+    Legacy: Upload a Google Takeout Gemini JSON file.
+    Returns the 50-variable personality vector (old path, kept for compatibility).
     """
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not set on server")
 
-    # Save upload to temp file
     tmp_path = f"/tmp/{file.filename}"
     out_path  = f"/tmp/{file.filename}_vector.json"
 
@@ -397,11 +524,24 @@ def store_archetype(payload: ArchetypePayload):
 @app.post("/v2/match")
 def get_snowflake_matches(payload: SnowflakeMatchPayload):
     """
-    Production matching: Snowflake vector search -> Python re-rank -> optional Gemini blurbs.
+    Production matching. When use_cortex=True: vector comparison is done entirely
+    in Snowflake via Cortex Search (768-dim, same as frontend). When use_cortex=False:
+    legacy 50-dim vector + Python re-rank.
     """
     if payload.context not in ("hackathon", "romantic", "friendship"):
         raise HTTPException(status_code=400, detail="context must be hackathon | romantic | friendship")
+    if not payload.use_cortex and not payload.vector:
+        raise HTTPException(status_code=400, detail="vector required when use_cortex is false")
     try:
+        if payload.use_cortex:
+            return snowflake_get_matches_cortex(
+                auth0_id=payload.user_id,
+                server_id=payload.server_id,
+                context=payload.context,
+                top_n=payload.top_n,
+                include_blurbs=payload.include_blurbs,
+                api_key=GEMINI_API_KEY,
+            )
         return snowflake_get_matches(
             user_id=payload.user_id,
             user_vector=payload.vector,
