@@ -41,6 +41,12 @@ from features import (
 )
 from vector_extraction import run_pipeline
 from matching import compute_match, result_to_dict
+from matching_engine import (
+    get_matches as snowflake_get_matches,
+    get_group_match as snowflake_get_group_match,
+    upsert_archetype,
+    increment_abandonment,
+)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -115,6 +121,29 @@ class OpeningPayload(BaseModel):
 class QuizPayload(BaseModel):
     vector: dict
     name: Optional[str] = "them"
+
+
+class SnowflakeMatchPayload(BaseModel):
+    user_id: str
+    vector: dict
+    context: str = "hackathon"
+    server_id: str = "hackathon"
+    top_n: int = 10
+    include_blurbs: bool = False
+
+class SnowflakeGroupPayload(BaseModel):
+    server_id: str
+    team_size: int = 4
+
+class ArchetypePayload(BaseModel):
+    user_id: str
+    server_id: str
+    vector: dict
+    reputation_score: float = 0.0
+
+class AbandonPayload(BaseModel):
+    user_id: str
+    server_id: str
 
 
 # ── HEALTH CHECK ──────────────────────────────────────────────────────────────
@@ -344,5 +373,62 @@ def get_opening_message(payload: OpeningPayload):
             payload.context, payload.name_a, payload.name_b,
             api_key=GEMINI_API_KEY
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# V2: SNOWFLAKE-BACKED ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/v2/archetype")
+def store_archetype(payload: ArchetypePayload):
+    """Store or update a user's archetype vector in Snowflake."""
+    try:
+        upsert_archetype(
+            payload.user_id, payload.server_id,
+            payload.vector, payload.reputation_score,
+        )
+        return {"status": "ok", "user_id": payload.user_id, "server_id": payload.server_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v2/match")
+def get_snowflake_matches(payload: SnowflakeMatchPayload):
+    """
+    Production matching: Snowflake vector search -> Python re-rank -> optional Gemini blurbs.
+    """
+    if payload.context not in ("hackathon", "romantic", "friendship"):
+        raise HTTPException(status_code=400, detail="context must be hackathon | romantic | friendship")
+    try:
+        return snowflake_get_matches(
+            user_id=payload.user_id,
+            user_vector=payload.vector,
+            context=payload.context,
+            server_id=payload.server_id,
+            top_n=payload.top_n,
+            include_blurbs=payload.include_blurbs,
+            api_key=GEMINI_API_KEY,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v2/match/group")
+def get_snowflake_group(payload: SnowflakeGroupPayload):
+    """Find optimal hackathon team from all active users in a server."""
+    try:
+        return snowflake_get_group_match(payload.server_id, payload.team_size)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v2/abandon")
+def report_abandonment(payload: AbandonPayload):
+    """Increment abandonment counter for a user. Auto-flags at >= 3."""
+    try:
+        increment_abandonment(payload.user_id, payload.server_id)
+        return {"status": "ok", "user_id": payload.user_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

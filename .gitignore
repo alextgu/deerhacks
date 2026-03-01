@@ -3,3 +3,10 @@ node_modules/
 .env
 .env.local
 *.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
