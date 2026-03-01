@@ -8,6 +8,23 @@ import { NavWalletDropdown } from "@/components/nav-wallet-dropdown";
 
 type ProfileWallet = { wallet_address?: string | null; sol_balance?: number | null };
 
+// ── Dimension → axis mapping (mirrors spider_chart.py) ────────────────────────
+const DIMENSION_VARS: Record<string, string[]> = {
+  "Creativity":  ["abstract_thinking", "novelty_seeking", "creative_drive", "contrarianism", "depth_vs_breadth"],
+  "Logic":       ["systems_thinking", "pattern_recognition", "detail_orientation", "decisiveness", "long_term_thinking"],
+  "Social":      ["social_energy", "empathy_signaling", "collaboration_enjoyment", "emotional_expressiveness", "leadership_drive"],
+  "Tech":        ["execution_bias", "structure_need", "perfectionism", "deadline_orientation", "async_preference"],
+  "Writing":     ["verbosity", "storytelling_tendency", "question_asking_rate", "directness", "formality"],
+  "Science":     ["intellectual_humility", "intrinsic_motivation", "impact_orientation", "ambition", "risk_tolerance"],
+};
+
+function extractChartScores(raw: Record<string, number>): number[] {
+  return Object.values(DIMENSION_VARS).map(vars => {
+    const vals = vars.map(v => raw[v] ?? 0.5);
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  });
+}
+
 // ── Spider Chart ──────────────────────────────────────────────────────────────
 function SpiderChart({ values, color, size = 220 }: { values: number[]; color: string; size?: number }) {
   const [disp, setDisp] = useState(values);
@@ -47,18 +64,11 @@ const MATCH_TYPES = [
   { id: "collaborator", label: "Collaborator",       desc: "Creative or technical project" },
 ];
 
-type MatchResult = {
-  auth0_id: string;
-  archetype_json?: unknown;
-  summary?: string;
-  match_blurb: string;
-};
-
 function MatchMakerModal({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [count, setCount] = useState(0);
   const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<MatchResult[] | null>(null);
+  const [results, setResults] = useState<Array<{ auth0_id: string; match_blurb: string }> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const toggle = (id: string) =>
@@ -71,24 +81,12 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
     setSearching(true);
     setError(null);
     setResults(null);
-
     const context = selected.join(",");
-    const serverId = selected[0] || "general";
-    const params = new URLSearchParams({
-      server_id: serverId,
-      top_n: String(count),
-      context,
-    });
-
+    const params = new URLSearchParams({ server_id: selected[0], top_n: String(count), context });
     try {
       const res = await fetch(`/api/matches?${params}`);
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Matching failed");
-        return;
-      }
-
+      if (!res.ok) { setError(data.error || "Matching failed"); return; }
       setResults(data.suggestedMatches ?? []);
     } catch {
       setError("Network error — try again");
@@ -97,18 +95,12 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const handleBack = () => {
-    setResults(null);
-    setError(null);
-  };
-
   return (
     <div
       style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem" }}
       onClick={onClose}
     >
       <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", background: "rgba(10,10,15,0.78)" }} />
-
       <div
         style={{ position: "relative", background: "linear-gradient(145deg,#14121f,#0e0c18)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 28, padding: "2.5rem", maxWidth: 640, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 40px 100px rgba(0,0,0,0.6),0 0 0 1px rgba(124,58,237,0.1),inset 0 1px 0 rgba(255,255,255,0.06)", animation: "matchModalIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
         onClick={e => e.stopPropagation()}
@@ -139,101 +131,30 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* ── Searching state ── */}
-        {searching && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem", padding: "3rem 1rem" }}>
-            <div style={{ position: "relative" }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", border: "2px solid rgba(124,58,237,0.2)", borderTop: "2px solid #a78bfa", animation: "spin 0.8s linear infinite" }} />
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              </div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontFamily: "var(--serif)", fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.4rem" }}>Comparing vectors…</div>
-              <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.4)", lineHeight: 1.6 }}>
-                Snowflake Cortex is searching through {count.toLocaleString()} candidates<br />
-                using your 768-dim personality embedding
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Results view ── */}
-        {results && !searching && (
-          <>
+        {/* Results view */}
+        {results ? (
+          <div>
             {results.length === 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem", padding: "2.5rem 1rem", textAlign: "center" }}>
-                <div style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                </div>
-                <div style={{ fontFamily: "var(--serif)", fontSize: "1.1rem", fontWeight: 700 }}>No matches found yet</div>
-                <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.4)", lineHeight: 1.6, maxWidth: 320 }}>
-                  There aren't enough users in this pool yet. Try again later or expand your search criteria.
-                </div>
-              </div>
+              <div style={{ textAlign: "center", padding: "2rem", color: "rgba(255,255,255,0.4)", fontSize: "0.85rem" }}>No matches found yet — check back as more people join.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                <div style={{ fontSize: "0.65rem", fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: "0.25rem" }}>
-                  {results.length} {results.length === 1 ? "match" : "matches"} found · {selected.map(s => MATCH_TYPES.find(t => t.id === s)?.label).filter(Boolean).join(", ")}
-                </div>
-                {results.map((match, i) => (
-                  <div
-                    key={match.auth0_id}
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "1.15rem 1.25rem", position: "relative", overflow: "hidden", transition: "border-color 0.2s" }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(124,58,237,0.35)"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
-                  >
-                    <div style={{ position: "absolute", top: 0, left: 0, width: 3, height: "100%", background: `linear-gradient(to bottom, #7c3aed, transparent)`, opacity: 1 - i * 0.25, borderRadius: "16px 0 0 16px" }} />
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: "0.85rem" }}>
-                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "0.75rem", color: "white", flexShrink: 0 }}>
-                        #{i + 1}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
-                          <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.9)" }}>
-                            Match #{i + 1}
-                          </span>
-                          <span style={{ fontSize: "0.6rem", fontWeight: 600, color: "#22c55e", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 100, padding: "0.08rem 0.45rem" }}>
-                            Vector Match
-                          </span>
-                        </div>
-                        <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.55)", lineHeight: 1.65 }}>
-                          {match.match_blurb}
-                        </div>
-                        {match.summary && (
-                          <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)", marginTop: "0.4rem", fontStyle: "italic" }}>
-                            {match.summary}
-                          </div>
-                        )}
-                      </div>
+                {results.map((r, i) => (
+                  <div key={r.auth0_id} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(124,58,237,0.2)", borderRadius: 14, padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "0.8rem", flexShrink: 0 }}>#{i + 1}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", marginBottom: "0.2rem", fontFamily: "monospace" }}>{r.auth0_id.slice(0, 16)}…</div>
+                      <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>{r.match_blurb}</div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-
-            {/* Back + Close buttons */}
-            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
-              <button
-                onClick={handleBack}
-                style={{ flex: 1, padding: "0.85rem", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.7)", fontFamily: "var(--font)", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
-              >
-                ← Search again
-              </button>
-              <button
-                onClick={onClose}
-                style={{ flex: 1, padding: "0.85rem", borderRadius: 14, border: "none", background: "linear-gradient(135deg,#7c3aed,#9333ea)", color: "white", fontFamily: "var(--font)", fontSize: "0.88rem", fontWeight: 700, cursor: "pointer", transition: "all 0.2s", boxShadow: "0 4px 16px rgba(124,58,237,0.3)" }}
-              >
-                Done
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* ── Config view (not searching, no results) ── */}
-        {!searching && !results && (
-          <>
-            {/* ── Section 1: Match Type ── */}
+            {error && <div style={{ marginTop: "1rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 10, padding: "0.7rem 1rem", fontSize: "0.78rem", color: "rgba(239,68,68,0.85)" }}>{error}</div>}
+            <button onClick={() => { setResults(null); setError(null); }} style={{ width: "100%", marginTop: "1.25rem", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "0.75rem", fontFamily: "var(--font)", fontSize: "0.85rem", fontWeight: 600, color: "rgba(255,255,255,0.6)", cursor: "pointer" }}>← Search again</button>
+          </div>
+        ) : (
+          <div>
+            {/* Section 1: Match type */}
             <div style={{ marginBottom: "2rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1rem" }}>
                 <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#a78bfa", flexShrink: 0 }}>1</div>
@@ -272,7 +193,7 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
 
             <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 0 2rem" }} />
 
-            {/* ── Section 2: How Many ── */}
+            {/* Section 2: Count */}
             <div style={{ marginBottom: "2rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.25rem" }}>
                 <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#a78bfa", flexShrink: 0 }}>2</div>
@@ -281,44 +202,23 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
                   <span style={{ marginLeft: "auto", fontSize: "0.65rem", fontWeight: 700, color: count <= 3 ? "#22c55e" : count <= 7 ? "#fbbf24" : "#f97316", background: count <= 3 ? "rgba(34,197,94,0.08)" : count <= 7 ? "rgba(251,191,36,0.08)" : "rgba(249,115,22,0.08)", border: `1px solid ${count <= 3 ? "rgba(34,197,94,0.2)" : count <= 7 ? "rgba(251,191,36,0.2)" : "rgba(249,115,22,0.2)"}`, borderRadius: 100, padding: "0.1rem 0.55rem", flexShrink: 0 }}>{count} {count === 1 ? "match" : "matches"}</span>
                 )}
               </div>
-
               <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", marginBottom: "1.1rem" }}>
-                <button
-                  onClick={() => setCount(c => Math.max(0, c - 1))}
-                  style={{ width: 48, height: 48, borderRadius: 14, background: count === 0 ? "rgba(255,255,255,0.02)" : "rgba(124,58,237,0.08)", border: `1px solid ${count === 0 ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.3)"}`, cursor: count === 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: count === 0 ? "rgba(255,255,255,0.18)" : "#a78bfa", fontSize: "1.4rem", fontWeight: 300, transition: "all 0.2s", flexShrink: 0 }}
-                >−</button>
+                <button onClick={() => setCount(c => Math.max(0, c - 1))} style={{ width: 48, height: 48, borderRadius: 14, background: count === 0 ? "rgba(255,255,255,0.02)" : "rgba(124,58,237,0.08)", border: `1px solid ${count === 0 ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.3)"}`, cursor: count === 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: count === 0 ? "rgba(255,255,255,0.18)" : "#a78bfa", fontSize: "1.4rem", fontWeight: 300, transition: "all 0.2s", flexShrink: 0 }}>−</button>
                 <div style={{ flex: 1, textAlign: "center", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: "1rem" }}>
                   <div style={{ fontFamily: "var(--serif)", fontSize: "3.5rem", fontWeight: 700, letterSpacing: -3, color: count === 0 ? "rgba(255,255,255,0.12)" : "#a78bfa", lineHeight: 1, transition: "color 0.3s" }}>{count}</div>
                   <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.25)", fontWeight: 700, letterSpacing: 2, marginTop: "0.2rem" }}>MATCHES</div>
                 </div>
-                <button
-                  onClick={() => setCount(c => Math.min(20, c + 1))}
-                  style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.3)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#a78bfa", fontSize: "1.4rem", fontWeight: 300, transition: "all 0.2s", flexShrink: 0 }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.18)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.08)"; }}
-                >+</button>
+                <button onClick={() => setCount(c => Math.min(20, c + 1))} style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.3)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#a78bfa", fontSize: "1.4rem", fontWeight: 300, transition: "all 0.2s", flexShrink: 0 }} onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.18)"; }} onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.08)"; }}>+</button>
               </div>
-
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 {[1, 3, 5, 10].map(n => (
-                  <button
-                    key={n}
-                    onClick={() => setCount(n)}
-                    style={{ flex: 1, padding: "0.55rem", borderRadius: 10, border: `1px solid ${count === n ? "rgba(124,58,237,0.55)" : "rgba(255,255,255,0.07)"}`, background: count === n ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.03)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, color: count === n ? "#a78bfa" : "rgba(255,255,255,0.38)", transition: "all 0.2s", fontFamily: "var(--font)" }}
-                  >{n}</button>
+                  <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: "0.55rem", borderRadius: 10, border: `1px solid ${count === n ? "rgba(124,58,237,0.55)" : "rgba(255,255,255,0.07)"}`, background: count === n ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.03)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, color: count === n ? "#a78bfa" : "rgba(255,255,255,0.38)", transition: "all 0.2s", fontFamily: "var(--font)" }}>{n}</button>
                 ))}
               </div>
             </div>
 
-            {/* Error banner */}
-            {error && (
-              <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 12, padding: "0.85rem 1.1rem", marginBottom: "1.25rem", display: "flex", gap: "0.65rem", alignItems: "center" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <span style={{ fontSize: "0.8rem", color: "rgba(239,68,68,0.85)", lineHeight: 1.5 }}>{error}</span>
-              </div>
-            )}
+            {error && <div style={{ marginBottom: "1rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 10, padding: "0.7rem 1rem", fontSize: "0.78rem", color: "rgba(239,68,68,0.85)" }}>{error}</div>}
 
-            {/* CTA */}
             <button
               disabled={!canSearch}
               onClick={handleSearch}
@@ -326,8 +226,17 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
               onMouseEnter={e => { if (canSearch) { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 10px 32px rgba(124,58,237,0.55)"; } }}
               onMouseLeave={e => { if (canSearch) { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 24px rgba(124,58,237,0.4)"; } }}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              {canSearch ? `Find ${count} ${count === 1 ? "match" : "matches"} →` : "Select a type & count to search"}
+              {searching ? (
+                <>
+                  <div style={{ width: 16, height: 16, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", animation: "spin 0.8s linear infinite" }} />
+                  Searching…
+                </>
+              ) : (
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  {canSearch ? `Find ${count} ${count === 1 ? "match" : "matches"} →` : "Select a type & count to search"}
+                </>
+              )}
             </button>
 
             {!canSearch && !searching && (
@@ -335,7 +244,7 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
                 {selected.length === 0 && count === 0 ? "Pick at least one type and set a count above" : selected.length === 0 ? "Pick at least one match type above" : "Set how many matches you want"}
               </p>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -390,6 +299,7 @@ function HowToModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Dashboard ─────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user, isLoading } = useUser();
   const router = useRouter();
@@ -404,6 +314,8 @@ export default function Dashboard() {
   const [wrongFileOverride, setWrongFileOverride] = useState(false);
   const [fileError, setFileError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [chartScores, setChartScores] = useState<number[]>([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+  const [pendingFile, setPendingFile] = useState<{ name: string; scores: number[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
@@ -418,6 +330,8 @@ export default function Dashboard() {
     fetchProfile();
     const stored = localStorage.getItem("dfs_uploaded_at");
     if (stored) { setHasData(true); setUploadedAt(new Date(stored)); setActiveTab("chart"); }
+    const storedScores = localStorage.getItem("dfs_chart_scores");
+    if (storedScores) { try { setChartScores(JSON.parse(storedScores)); } catch {} }
     const onSync = () => fetchProfile();
     window.addEventListener("wallet-synced", onSync);
     return () => window.removeEventListener("wallet-synced", onSync);
@@ -429,45 +343,43 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleFile = async (file: File | null) => {
+  const handleFile = (file: File | null) => {
     if (!file) return;
-    if (!file.name.endsWith(".json")) { setFileError("Only .json files are accepted. Please export your Gemini data as JSON."); return; }
+    if (!file.name.endsWith(".json")) {
+      setFileError("Only .json files are accepted. Please export your Gemini data as JSON.");
+      setPendingFile(null);
+      return;
+    }
     setFileError("");
     setUploading(true);
-
-    try {
-      const userId = user?.sub ?? "anonymous";
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("user_id", userId);
-      formData.append("server_id", "general");
-
-      const res = await fetch(`${backendUrl}/extract`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
-        setFileError(err.detail || "Upload failed. Please try again.");
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string);
+        const raw: Record<string, number> = json.scores ?? {};
+        const scores = extractChartScores(raw);
+        setPendingFile({ name: file.name, scores });
         setUploading(false);
-        return;
+      } catch {
+        setFileError("Couldn't parse that file. Make sure it's a valid Gemini export JSON.");
+        setPendingFile(null);
+        setUploading(false);
       }
+    };
+    reader.onerror = () => { setFileError("Failed to read the file."); setPendingFile(null); setUploading(false); };
+    reader.readAsText(file);
+  };
 
-      const data = await res.json();
-      const now = new Date();
-      localStorage.setItem("dfs_uploaded_at", now.toISOString());
-      if (data.message_count) localStorage.setItem("dfs_message_count", String(data.message_count));
-      setHasData(true);
-      setUploadedAt(now);
-      setActiveTab("chart");
-    } catch (e) {
-      setFileError(e instanceof Error ? e.message : "Failed to connect to backend. Is it running?");
-    } finally {
-      setUploading(false);
-    }
+  const handleGenerateChart = () => {
+    if (!pendingFile) return;
+    const now = new Date();
+    localStorage.setItem("dfs_uploaded_at", now.toISOString());
+    localStorage.setItem("dfs_chart_scores", JSON.stringify(pendingFile.scores));
+    setChartScores(pendingFile.scores);
+    setHasData(true);
+    setUploadedAt(now);
+    setPendingFile(null);
+    setActiveTab("chart");
   };
 
   const handleWrongFile = () => setWrongFileOverride(true);
@@ -515,7 +427,6 @@ export default function Dashboard() {
         @keyframes shimmerBar{0%{background-position:0% 50%}100%{background-position:200% 50%}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes findPulse{0%,100%{box-shadow:0 4px 24px rgba(124,58,237,0.45)}50%{box-shadow:0 4px 36px rgba(124,58,237,0.75),0 0 0 6px rgba(124,58,237,0.1)}}
-
         .dash-nav{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 2.5rem;border-bottom:1px solid var(--border);background:rgba(10,10,15,0.85);backdrop-filter:blur(20px);position:sticky;top:0;z-index:100;}
         .dash-logo{font-weight:900;font-size:1.2rem;letter-spacing:-0.5px;display:flex;align-items:center;gap:0.5rem;text-decoration:none;color:var(--text);}
         .logo-dot{width:10px;height:10px;border-radius:50%;background:var(--v2);position:relative;}
@@ -527,21 +438,16 @@ export default function Dashboard() {
         .wallet-nav-btn:hover{border-color:var(--v2);background:rgba(124,58,237,0.08);}
         .logout-btn{background:none;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.75);border-radius:8px;padding:0.38rem 0.85rem;font-family:var(--font);font-size:0.78rem;font-weight:600;cursor:pointer;transition:all 0.2s;text-decoration:none;display:flex;align-items:center;gap:0.35rem;}
         .logout-btn:hover{border-color:rgba(239,68,68,0.7);color:rgba(239,68,68,1);background:rgba(239,68,68,0.06);}
-
         .dash-main{padding:2.5rem;max-width:1100px;margin:0 auto;width:100%;}
         .page-header{margin-bottom:2rem;animation:fadeUp 0.5s ease forwards;}
         .page-eyebrow{font-size:0.65rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--v2);margin-bottom:0.4rem;}
         .page-title{font-family:var(--serif);font-size:clamp(1.75rem,3vw,2.4rem);font-weight:700;letter-spacing:-1px;line-height:1.05;}
         .page-title em{font-style:italic;color:transparent;background:linear-gradient(135deg,var(--v2),#f97316);background-size:200% 200%;animation:gradient-shift 4s ease infinite;-webkit-background-clip:text;background-clip:text;}
-
         .dash-grid{display:grid;grid-template-columns:300px 1fr;gap:1.25rem;align-items:stretch;}
-        .profile-card{display:flex;flex-direction:column;}
-
-        .profile-card{background:var(--dark2);border:1px solid var(--border);border-radius:22px;overflow:hidden;animation:fadeUp 0.5s ease 0.05s forwards;opacity:0;position:relative;}
+        .profile-card{background:var(--dark2);border:1px solid var(--border);border-radius:22px;overflow:hidden;animation:fadeUp 0.5s ease 0.05s forwards;opacity:0;position:relative;display:flex;flex-direction:column;}
         .profile-banner{height:80px;background:linear-gradient(135deg,#1a0a3d 0%,#0f0a1f 50%,#130a2e 100%);position:relative;}
         .profile-banner-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 100%,rgba(124,58,237,0.35) 0%,transparent 70%);}
         .profile-body{padding:0 1.5rem 1.75rem;display:flex;flex-direction:column;flex:1;}
-        .profile-body .find-match-btn{flex:1;min-height:140px;}
         .profile-avatar-wrap{position:relative;margin-top:-32px;margin-bottom:1rem;}
         .profile-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--v),var(--v2));display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:800;color:white;border:3px solid var(--dark2);box-shadow:0 0 24px rgba(124,58,237,0.3);overflow:hidden;position:relative;}
         .profile-avatar img{width:100%;height:100%;object-fit:cover;}
@@ -557,44 +463,15 @@ export default function Dashboard() {
         .profile-stat{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:0.75rem 0.5rem;text-align:center;}
         .profile-stat-val{font-family:var(--serif);font-size:1.25rem;font-weight:700;color:var(--v2);line-height:1;}
         .profile-stat-lbl{font-size:0.58rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:0.3rem;}
-        .setup-progress{margin-top:1.25rem;}
-        .progress-title{font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:0.85rem;}
-        .progress-item{display:flex;align-items:center;gap:0.65rem;padding:0.5rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.78rem;font-weight:600;}
-        .progress-item:last-child{border-bottom:none;padding-bottom:0;}
-        .progress-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-        .progress-dot.green{background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,0.5);}
-        .progress-dot.yellow{background:#fbbf24;box-shadow:0 0 6px rgba(251,191,36,0.5);}
-        .progress-dot.gray{background:rgba(255,255,255,0.18);}
-        .progress-text{flex:1;color:rgba(255,255,255,0.65);}
-        .progress-badge{font-size:0.58rem;font-weight:700;padding:0.12rem 0.45rem;border-radius:100px;letter-spacing:0.5px;}
-        .badge-done{background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2);}
-        .badge-pending{background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.2);}
-        .badge-soon{background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid rgba(255,255,255,0.08);}
-
-        /* ── FIND MY MATCH BUTTON ── */
-        .find-match-btn{
-          width:100%;margin-top:0;
-          background:linear-gradient(135deg,#7c3aed,#9333ea);
-          color:white;border:none;border-radius:16px;
-          padding:1.75rem 1.5rem;
-          font-family:var(--font);font-size:1.05rem;font-weight:800;
-          cursor:pointer;transition:transform 0.25s, box-shadow 0.25s;
-          display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5rem;
-          letter-spacing:0.3px;
-          animation:findPulse 3s ease-in-out infinite;
-          position:relative;overflow:hidden;
-          min-height:110px;
-        }
+        .find-match-btn{width:100%;margin-top:0;background:linear-gradient(135deg,#7c3aed,#9333ea);color:white;border:none;border-radius:16px;padding:1.75rem 1.5rem;font-family:var(--font);font-size:1.05rem;font-weight:800;cursor:pointer;transition:transform 0.25s,box-shadow 0.25s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5rem;letter-spacing:0.3px;animation:findPulse 3s ease-in-out infinite;position:relative;overflow:hidden;min-height:110px;}
         .find-match-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.15),transparent 60%);opacity:0;transition:opacity 0.2s;}
         .find-match-btn:hover{transform:translateY(-2px);animation:none;box-shadow:0 8px 32px rgba(124,58,237,0.65)!important;}
         .find-match-btn:hover::before{opacity:1;}
-
         .right-panel{display:flex;flex-direction:column;gap:1.25rem;animation:fadeUp 0.5s ease 0.1s forwards;opacity:0;}
         .tabs{display:flex;gap:0.35rem;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:0.3rem;}
         .tab-btn{flex:1;padding:0.55rem 1rem;border-radius:9px;border:none;background:none;font-family:var(--font);font-size:0.82rem;font-weight:600;cursor:pointer;transition:all 0.2s;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:0.5rem;}
         .tab-btn.active{background:var(--dark2);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,0.3);}
         .tab-btn:hover:not(.active){color:rgba(255,255,255,0.7);}
-
         .upload-card{background:var(--dark2);border:1px solid var(--border);border-radius:22px;padding:2rem;display:flex;flex-direction:column;gap:1.5rem;}
         .card-eyebrow{font-size:0.62rem;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--v2);margin-bottom:0.35rem;}
         .card-title{font-family:var(--serif);font-size:1.25rem;font-weight:700;letter-spacing:-0.4px;line-height:1.15;}
@@ -613,7 +490,6 @@ export default function Dashboard() {
         .howto-arrow{margin-left:auto;color:var(--v2);opacity:0.7;}
         .btn-primary{background:linear-gradient(135deg,var(--v),#9333ea);color:white;border:none;border-radius:12px;padding:0.85rem 2rem;font-family:var(--font);font-size:0.88rem;font-weight:700;cursor:pointer;transition:all 0.25s;box-shadow:0 4px 20px rgba(124,58,237,0.3);width:100%;}
         .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(124,58,237,0.45);}
-
         .chart-card{background:var(--dark2);border:1px solid var(--border);border-radius:22px;padding:2rem;min-height:400px;display:flex;flex-direction:column;}
         .chart-locked{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;border-radius:14px;overflow:hidden;}
         .chart-blur-bg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;filter:blur(8px);opacity:0.3;pointer-events:none;}
@@ -624,7 +500,6 @@ export default function Dashboard() {
         .chart-axes{display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-top:1.25rem;}
         .chart-axis-pill{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:0.45rem 0.75rem;font-size:0.72rem;font-weight:600;color:var(--muted);text-align:center;position:relative;overflow:hidden;}
         .chart-axis-pill::before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(124,58,237,0.06),transparent);background-size:200% 100%;animation:shimmer 2.5s ease-in-out infinite;}
-
         .wallet-section{margin-top:1.5rem;}
         .section-eyebrow{font-size:0.62rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--v2);margin-bottom:0.4rem;}
         .section-title{font-family:var(--serif);font-size:clamp(1.3rem,2.5vw,1.8rem);font-weight:700;letter-spacing:-0.8px;line-height:1.05;margin-bottom:1.25rem;}
@@ -639,7 +514,6 @@ export default function Dashboard() {
         .wallet-empty{display:flex;flex-direction:column;align-items:center;gap:0.65rem;padding:1.5rem;text-align:center;color:var(--muted);}
         .wallet-empty-icon{width:44px;height:44px;border-radius:12px;background:rgba(124,58,237,0.07);border:1px solid rgba(124,58,237,0.14);display:flex;align-items:center;justify-content:center;}
         .section-divider{height:1px;background:var(--border);margin:2rem 0;}
-
         @media(max-width:900px){
           .dash-grid{grid-template-columns:1fr;}
           .dash-main{padding:1.5rem;}
@@ -651,31 +525,27 @@ export default function Dashboard() {
       {showHowTo && <HowToModal onClose={() => setShowHowTo(false)} />}
       {showMatchMaker && <MatchMakerModal onClose={() => setShowMatchMaker(false)} />}
 
-      {/* NAV */}
-        <nav className="dash-nav">
+      <nav className="dash-nav">
         <a href="/" className="dash-logo"><div className="logo-dot" />DFS</a>
         <div className="nav-right">
-            <NavWalletDropdown buttonClassName="wallet-nav-btn" />
-            <span className="nav-email">{user.email}</span>
-            <a href="/auth/logout" className="logout-btn">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                Log out
-            </a>
-            <div className="nav-avatar">
-                {user.picture ? <img src={user.picture} alt={displayName} /> : initials}
-            </div>
+          <NavWalletDropdown buttonClassName="wallet-nav-btn" />
+          <a href="/auth/logout" className="logout-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Log out
+          </a>
+          <div className="nav-avatar">
+            {user.picture ? <img src={user.picture} alt={displayName} /> : initials}
+          </div>
         </div>
       </nav>
 
       <main className="dash-main">
-        {/* PAGE HEADER */}
         <div className="page-header">
           <div className="page-eyebrow">Your Dashboard</div>
           <h1 className="page-title">Welcome back, <em>{firstName}</em></h1>
-          </div>
+        </div>
 
         <div className="dash-grid">
-
           {/* ── LEFT: PROFILE CARD ── */}
           <div className="profile-card">
             <div className="profile-banner"><div className="profile-banner-glow" /></div>
@@ -688,7 +558,6 @@ export default function Dashboard() {
               </div>
               <div className="profile-name">{displayName}</div>
               <div className="profile-email">{user.email}</div>
-
               <div className="profile-info-grid">
                 <div className="profile-info-row">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -703,9 +572,7 @@ export default function Dashboard() {
                   <span>Network</span><span className="profile-info-val">Solana Devnet</span>
                 </div>
               </div>
-
-                <div className="profile-divider" />
-
+              <div className="profile-divider" />
               <div className="profile-stats">
                 {[{val:"—",lbl:"Matches"},{val:"—",lbl:"Score"},{val:"0",lbl:"Chats"}].map(s => (
                   <div key={s.lbl} className="profile-stat">
@@ -714,8 +581,6 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
-
-              {/* ── FIND MY MATCH ── */}
               <div className="profile-divider" />
               <button className="find-match-btn" onClick={() => setShowMatchMaker(true)}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -751,7 +616,8 @@ export default function Dashboard() {
                         {uploadedAt && <span style={{ display: "block", marginTop: "0.3rem", fontSize: "0.72rem", color: "rgba(255,255,255,0.3)" }}>Uploaded {uploadedAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>}
                       </div>
                     </div>
-                    <button onClick={handleWrongFile} style={{ background: "none", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "0.6rem 1.2rem", fontFamily: "var(--font)", fontSize: "0.78rem", fontWeight: 600, color: "rgba(255,255,255,0.45)", cursor: "pointer", transition: "all 0.2s", marginTop: "0.25rem" }}
+                    <button onClick={handleWrongFile}
+                      style={{ background: "none", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "0.6rem 1.2rem", fontFamily: "var(--font)", fontSize: "0.78rem", fontWeight: 600, color: "rgba(255,255,255,0.45)", cursor: "pointer", transition: "all 0.2s", marginTop: "0.25rem" }}
                       onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239,68,68,0.4)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(239,68,68,0.7)"; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.12)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.45)"; }}
                     >I uploaded the wrong file — let me redo it</button>
@@ -772,8 +638,17 @@ export default function Dashboard() {
                   {uploading ? (
                     <>
                       <div style={{ width: 44, height: 44, borderRadius: "50%", border: "2px solid rgba(124,58,237,0.2)", borderTop: "2px solid #a78bfa", animation: "spin 0.8s linear infinite" }} />
-                      <div className="upload-zone-title">Analysing your data…</div>
-                      <div className="upload-zone-sub">Extracting interest vectors · this takes a moment</div>
+                      <div className="upload-zone-title">Reading file…</div>
+                      <div className="upload-zone-sub">Hang on a sec</div>
+                    </>
+                  ) : pendingFile ? (
+                    <>
+                      <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(34,197,94,0.12)", border: "2px solid rgba(34,197,94,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      </div>
+                      <div className="upload-zone-title" style={{ color: "rgba(255,255,255,0.9)" }}>File ready</div>
+                      <div className="upload-zone-sub" style={{ color: "rgba(34,197,94,0.8)", fontWeight: 600 }}>{pendingFile.name}</div>
+                      <div style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.3)", marginTop: "0.15rem" }}>Click to swap file</div>
                     </>
                   ) : (
                     <>
@@ -800,9 +675,16 @@ export default function Dashboard() {
                   <div className="howto-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
                 </button>
 
-                <button className="btn-primary" disabled={uploading} onClick={() => fileInputRef.current?.click()} style={{ opacity: uploading ? 0.5 : 1, cursor: uploading ? "not-allowed" : "pointer" }}>
-                  {uploading ? "Processing…" : "Upload Gemini Data →"}
-                </button>
+                {pendingFile ? (
+                  <button className="btn-primary" onClick={handleGenerateChart} style={{ background: "linear-gradient(135deg,#22c55e,#16a34a)", boxShadow: "0 4px 20px rgba(34,197,94,0.35)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    Make My Chart →
+                  </button>
+                ) : (
+                  <button className="btn-primary" disabled={uploading} onClick={() => fileInputRef.current?.click()} style={{ opacity: uploading ? 0.5 : 0.45, cursor: uploading ? "not-allowed" : "pointer", background: "rgba(124,58,237,0.3)", boxShadow: "none", border: "1px solid rgba(124,58,237,0.3)" }}>
+                    {uploading ? "Reading…" : "Upload a file first ↑"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -813,7 +695,7 @@ export default function Dashboard() {
                 {hasData ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "center", flex: 1, alignItems: "center" }}>
-                      <SpiderChart values={[0.8,0.6,0.7,0.9,0.5,0.75]} color="#a78bfa" size={280} />
+                      <SpiderChart values={chartScores} color="#a78bfa" size={280} />
                     </div>
                     {uploadedAt && (
                       <div style={{ textAlign: "center", marginTop: "0.75rem", fontSize: "0.72rem", color: "var(--muted)", fontWeight: 500 }}>
@@ -842,7 +724,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* WALLET SECTION */}
         <div className="section-divider" />
         <div id="wallet" className="wallet-section">
           <div className="section-eyebrow">Solana · Devnet</div>
@@ -882,10 +763,10 @@ export default function Dashboard() {
                 <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>No transactions yet</div>
                 <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>Connect your wallet and complete matches to see activity</div>
               </div>
-              </div>
             </div>
           </div>
-        </main>
+        </div>
+      </main>
     </>
   );
 }
