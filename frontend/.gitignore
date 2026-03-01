@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+list_models.py
 
 # debug
 npm-debug.log*
