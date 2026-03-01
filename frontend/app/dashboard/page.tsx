@@ -8,6 +8,23 @@ import { NavWalletDropdown } from "@/components/nav-wallet-dropdown";
 
 type ProfileWallet = { wallet_address?: string | null; sol_balance?: number | null };
 
+// ── Dimension → axis mapping (mirrors spider_chart.py) ────────────────────────
+const DIMENSION_VARS: Record<string, string[]> = {
+  "Creativity":  ["abstract_thinking", "novelty_seeking", "creative_drive", "contrarianism", "depth_vs_breadth"],
+  "Logic":       ["systems_thinking", "pattern_recognition", "detail_orientation", "decisiveness", "long_term_thinking"],
+  "Social":      ["social_energy", "empathy_signaling", "collaboration_enjoyment", "emotional_expressiveness", "leadership_drive"],
+  "Tech":        ["execution_bias", "structure_need", "perfectionism", "deadline_orientation", "async_preference"],
+  "Writing":     ["verbosity", "storytelling_tendency", "question_asking_rate", "directness", "formality"],
+  "Science":     ["intellectual_humility", "intrinsic_motivation", "impact_orientation", "ambition", "risk_tolerance"],
+};
+
+function extractChartScores(raw: Record<string, number>): number[] {
+  return Object.values(DIMENSION_VARS).map(vars => {
+    const vals = vars.map(v => raw[v] ?? 0.5);
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  });
+}
+
 // ── Spider Chart ──────────────────────────────────────────────────────────────
 function SpiderChart({ values, color, size = 220 }: { values: number[]; color: string; size?: number }) {
   const [disp, setDisp] = useState(values);
@@ -61,17 +78,14 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
       style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem" }}
       onClick={onClose}
     >
-      {/* Blurred backdrop */}
       <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", background: "rgba(10,10,15,0.78)" }} />
 
       <div
         style={{ position: "relative", background: "linear-gradient(145deg,#14121f,#0e0c18)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 28, padding: "2.5rem", maxWidth: 640, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 40px 100px rgba(0,0,0,0.6),0 0 0 1px rgba(124,58,237,0.1),inset 0 1px 0 rgba(255,255,255,0.06)", animation: "matchModalIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Animated top bar */}
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, borderRadius: "28px 28px 0 0", background: "linear-gradient(90deg,#7c3aed,#a78bfa,#f97316,#a78bfa,#7c3aed)", backgroundSize: "200% 100%", animation: "shimmerBar 3s linear infinite" }} />
 
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "2rem" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
@@ -95,7 +109,6 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* ── Section 1: Match Type ── */}
         <div style={{ marginBottom: "2rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1rem" }}>
             <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#a78bfa", flexShrink: 0 }}>1</div>
@@ -132,10 +145,8 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* Divider */}
         <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 0 2rem" }} />
 
-        {/* ── Section 2: How Many ── */}
         <div style={{ marginBottom: "2rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.25rem" }}>
             <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#a78bfa", flexShrink: 0 }}>2</div>
@@ -145,7 +156,6 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
-          {/* Counter */}
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", marginBottom: "1.1rem" }}>
             <button
               onClick={() => setCount(c => Math.max(0, c - 1))}
@@ -163,7 +173,6 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
             >+</button>
           </div>
 
-          {/* Quick presets */}
           <div style={{ display: "flex", gap: "0.5rem" }}>
             {[1, 3, 5, 10].map(n => (
               <button
@@ -175,7 +184,6 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* CTA */}
         <button
           disabled={!canSearch}
           style={{ width: "100%", padding: "1rem", borderRadius: 14, border: "none", background: canSearch ? "linear-gradient(135deg,#7c3aed,#9333ea)" : "rgba(255,255,255,0.05)", color: canSearch ? "white" : "rgba(255,255,255,0.22)", fontFamily: "var(--font)", fontSize: "0.95rem", fontWeight: 700, cursor: canSearch ? "pointer" : "not-allowed", transition: "all 0.3s", boxShadow: canSearch ? "0 6px 24px rgba(124,58,237,0.4)" : "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem" }}
@@ -258,6 +266,8 @@ export default function Dashboard() {
   const [wrongFileOverride, setWrongFileOverride] = useState(false);
   const [fileError, setFileError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [chartScores, setChartScores] = useState<number[]>([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+  const [pendingFile, setPendingFile] = useState<{ name: string; scores: number[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
@@ -272,6 +282,10 @@ export default function Dashboard() {
     fetchProfile();
     const stored = localStorage.getItem("dfs_uploaded_at");
     if (stored) { setHasData(true); setUploadedAt(new Date(stored)); setActiveTab("chart"); }
+    const storedScores = localStorage.getItem("dfs_chart_scores");
+    if (storedScores) {
+      try { setChartScores(JSON.parse(storedScores)); } catch {}
+    }
     const onSync = () => fetchProfile();
     window.addEventListener("wallet-synced", onSync);
     return () => window.removeEventListener("wallet-synced", onSync);
@@ -285,14 +299,46 @@ export default function Dashboard() {
 
   const handleFile = (file: File | null) => {
     if (!file) return;
-    if (!file.name.endsWith(".json")) { setFileError("Only .json files are accepted. Please export your Gemini data as JSON."); return; }
+    if (!file.name.endsWith(".json")) {
+      setFileError("Only .json files are accepted. Please export your Gemini data as JSON.");
+      setPendingFile(null);
+      return;
+    }
     setFileError("");
     setUploading(true);
-    setTimeout(() => {
-      const now = new Date();
-      localStorage.setItem("dfs_uploaded_at", now.toISOString());
-      setHasData(true); setUploadedAt(now); setUploading(false); setActiveTab("chart");
-    }, 1800);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string);
+        const raw: Record<string, number> = json.scores ?? {};
+        const scores = extractChartScores(raw);
+        setPendingFile({ name: file.name, scores });
+        setUploading(false);
+      } catch {
+        setFileError("Couldn't parse that file. Make sure it's a valid Gemini export JSON.");
+        setPendingFile(null);
+        setUploading(false);
+      }
+    };
+    reader.onerror = () => {
+      setFileError("Failed to read the file.");
+      setPendingFile(null);
+      setUploading(false);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleGenerateChart = () => {
+    if (!pendingFile) return;
+    const now = new Date();
+    localStorage.setItem("dfs_uploaded_at", now.toISOString());
+    localStorage.setItem("dfs_chart_scores", JSON.stringify(pendingFile.scores));
+    setChartScores(pendingFile.scores);
+    setHasData(true);
+    setUploadedAt(now);
+    setPendingFile(null);
+    setActiveTab("chart");
   };
 
   const handleWrongFile = () => setWrongFileOverride(true);
@@ -396,7 +442,6 @@ export default function Dashboard() {
         .badge-pending{background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.2);}
         .badge-soon{background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid rgba(255,255,255,0.08);}
 
-        /* ── FIND MY MATCH BUTTON ── */
         .find-match-btn{
           width:100%;margin-top:0;
           background:linear-gradient(135deg,#7c3aed,#9333ea);
@@ -480,16 +525,16 @@ export default function Dashboard() {
       <nav className="dash-nav">
         <a href="/" className="dash-logo"><div className="logo-dot" />DFS</a>
         <div className="nav-right">
-            <NavWalletDropdown buttonClassName="wallet-nav-btn" />
+          <NavWalletDropdown buttonClassName="wallet-nav-btn" />
 
-            <a href="/auth/logout" className="logout-btn">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                Log out
-            </a>
+          <a href="/auth/logout" className="logout-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Log out
+          </a>
 
-            <div className="nav-avatar">
-                {user.picture ? <img src={user.picture} alt={displayName} /> : initials}
-            </div>
+          <div className="nav-avatar">
+            {user.picture ? <img src={user.picture} alt={displayName} /> : initials}
+          </div>
         </div>
       </nav>
 
@@ -597,8 +642,17 @@ export default function Dashboard() {
                   {uploading ? (
                     <>
                       <div style={{ width: 44, height: 44, borderRadius: "50%", border: "2px solid rgba(124,58,237,0.2)", borderTop: "2px solid #a78bfa", animation: "spin 0.8s linear infinite" }} />
-                      <div className="upload-zone-title">Analysing your data…</div>
-                      <div className="upload-zone-sub">Extracting interest vectors · this takes a moment</div>
+                      <div className="upload-zone-title">Reading file…</div>
+                      <div className="upload-zone-sub">Hang on a sec</div>
+                    </>
+                  ) : pendingFile ? (
+                    <>
+                      <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(34,197,94,0.12)", border: "2px solid rgba(34,197,94,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      </div>
+                      <div className="upload-zone-title" style={{ color: "rgba(255,255,255,0.9)" }}>File ready</div>
+                      <div className="upload-zone-sub" style={{ color: "rgba(34,197,94,0.8)", fontWeight: 600 }}>{pendingFile.name}</div>
+                      <div style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.3)", marginTop: "0.15rem" }}>Click to swap file</div>
                     </>
                   ) : (
                     <>
@@ -625,9 +679,26 @@ export default function Dashboard() {
                   <div className="howto-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
                 </button>
 
-                <button className="btn-primary" disabled={uploading} onClick={() => fileInputRef.current?.click()} style={{ opacity: uploading ? 0.5 : 1, cursor: uploading ? "not-allowed" : "pointer" }}>
-                  {uploading ? "Processing…" : "Upload Gemini Data →"}
-                </button>
+                {/* Bottom CTA — changes based on state */}
+                {pendingFile ? (
+                  <button
+                    className="btn-primary"
+                    onClick={handleGenerateChart}
+                    style={{ background: "linear-gradient(135deg,#22c55e,#16a34a)", boxShadow: "0 4px 20px rgba(34,197,94,0.35)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem" }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    Make My Chart →
+                  </button>
+                ) : (
+                  <button
+                    className="btn-primary"
+                    disabled={uploading}
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{ opacity: uploading ? 0.5 : 0.45, cursor: uploading ? "not-allowed" : "pointer", background: "rgba(124,58,237,0.3)", boxShadow: "none", border: "1px solid rgba(124,58,237,0.3)" }}
+                  >
+                    {uploading ? "Reading…" : "Upload a file first ↑"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -638,7 +709,7 @@ export default function Dashboard() {
                 {hasData ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "center", flex: 1, alignItems: "center" }}>
-                      <SpiderChart values={[0.8,0.6,0.7,0.9,0.5,0.75]} color="#a78bfa" size={280} />
+                      <SpiderChart values={chartScores} color="#a78bfa" size={280} />
                     </div>
                     {uploadedAt && (
                       <div style={{ textAlign: "center", marginTop: "0.75rem", fontSize: "0.72rem", color: "var(--muted)", fontWeight: 500 }}>
