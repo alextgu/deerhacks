@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { getDisplayName } from "@/lib/user-display";
+import { NavWalletDropdown } from "@/components/nav-wallet-dropdown";
 
 // ── Intersection observer hook ─────────────────────────────────────────────────
 function useInView(threshold = 0.15) {
@@ -692,15 +693,7 @@ export default function Home() {
         <div className="nav-r">
           {user ? (
             <>
-              <a href="/dashboard#wallet" style={{textDecoration:"none"}}>
-                <button className="nb" style={{display:"flex",alignItems:"center",gap:"0.4rem",borderColor:"rgba(124,58,237,0.35)",color:"var(--v2)"}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="5" width="20" height="14" rx="2"/>
-                    <path d="M16 12h.01"/>
-                  </svg>
-                  Wallet
-                </button>
-              </a>
+              <NavWalletDropdown />
               <div className="user-menu-wrap">
                 <button className="user-avatar-btn" onClick={() => {
                   const d = document.getElementById('user-dropdown');

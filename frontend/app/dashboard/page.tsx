@@ -4,11 +4,15 @@ import { useUser } from "@auth0/nextjs-auth0/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getDisplayName, getFirstName, getInitials } from "@/lib/user-display";
+import { NavWalletDropdown } from "@/components/nav-wallet-dropdown";
+
+type ProfileWallet = { wallet_address?: string | null; sol_balance?: number | null };
 
 export default function Dashboard() {
   const { user, isLoading } = useUser();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [profile, setProfile] = useState<ProfileWallet | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -19,6 +23,21 @@ export default function Dashboard() {
       router.push("/auth/login");
     }
   }, [user, isLoading, router]);
+
+  const fetchProfile = () => {
+    fetch("/api/profile")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => data?.profile && setProfile(data.profile))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    fetchProfile();
+    const onSync = () => fetchProfile();
+    window.addEventListener("wallet-synced", onSync);
+    return () => window.removeEventListener("wallet-synced", onSync);
+  }, [user]);
 
   if (!mounted || isLoading) {
     return (
@@ -365,16 +384,7 @@ export default function Dashboard() {
             DFS
           </a>
           <div className="dash-nav-right">
-            <button
-              className="wallet-nav-btn"
-              onClick={() => document.getElementById('wallet')?.scrollIntoView({ behavior: 'smooth' })}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="5" width="20" height="14" rx="2"/>
-                <path d="M16 12h.01"/>
-              </svg>
-              Wallet
-            </button>
+            <NavWalletDropdown buttonClassName="wallet-nav-btn" />
             <span className="dash-nav-name">{user.email}</span>
             <div className="dash-avatar">
               {user.picture ? <img src={user.picture} alt={displayName} /> : initials}
@@ -520,15 +530,20 @@ export default function Dashboard() {
               <div className="wallet-card" style={{ background: "linear-gradient(135deg, #1a0a3d, #0f0a1f)" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, var(--v), var(--v2))", borderRadius: "22px 22px 0 0" }} />
                 <div className="wallet-balance-label">Total Balance</div>
-                <div className="wallet-balance-val">0 <span style={{ fontSize: "1.2rem", color: "var(--muted)" }}>SOL</span></div>
+                <div className="wallet-balance-val">
+                  {profile?.sol_balance != null ? Number(profile.sol_balance).toFixed(4) : "0"}{" "}
+                  <span style={{ fontSize: "1.2rem", color: "var(--muted)" }}>SOL</span>
+                </div>
                 <div className="wallet-balance-sub">≈ $0.00 USD · Devnet</div>
-                <button className="wallet-connect-btn">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                  </svg>
-                  Connect Wallet
-                </button>
+                {profile?.wallet_address ? (
+                  <div className="wallet-address" style={{ marginTop: "0.75rem", fontSize: "0.72rem", color: "var(--muted)", fontFamily: "monospace" }}>
+                    {profile.wallet_address.slice(0, 4)}...{profile.wallet_address.slice(-4)}
+                  </div>
+                ) : (
+                  <p style={{ marginTop: "0.75rem", fontSize: "0.8rem", color: "var(--muted)" }}>
+                    Use the <strong>Wallet</strong> button in the nav to connect; balance will appear here.
+                  </p>
+                )}
               </div>
 
               {/* REPUTATION CARD */}
