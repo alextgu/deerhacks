@@ -72,7 +72,7 @@ export function ChatModal({
 
         {/* chat body */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          <ChatPanel matchId={matchId} currentUserId={currentUserId} />
+          <ChatPanel matchId={matchId} currentUserId={currentUserId} matchBlurb={matchBlurb} />
         </div>
       </div>
     </div>

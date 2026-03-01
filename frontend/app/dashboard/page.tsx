@@ -47,28 +47,72 @@ const MATCH_TYPES = [
   { id: "collaborator", label: "Collaborator",       desc: "Creative or technical project" },
 ];
 
+type MatchResult = {
+  auth0_id: string;
+  archetype_json?: unknown;
+  summary?: string;
+  match_blurb: string;
+};
+
 function MatchMakerModal({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [count, setCount] = useState(0);
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<MatchResult[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const toggle = (id: string) =>
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
-  const canSearch = selected.length > 0 && count > 0;
+  const canSearch = selected.length > 0 && count > 0 && !searching;
+
+  const handleSearch = async () => {
+    if (!canSearch) return;
+    setSearching(true);
+    setError(null);
+    setResults(null);
+
+    const context = selected.join(",");
+    const serverId = selected[0] || "general";
+    const params = new URLSearchParams({
+      server_id: serverId,
+      top_n: String(count),
+      context,
+    });
+
+    try {
+      const res = await fetch(`/api/matches?${params}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Matching failed");
+        return;
+      }
+
+      setResults(data.suggestedMatches ?? []);
+    } catch {
+      setError("Network error — try again");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleBack = () => {
+    setResults(null);
+    setError(null);
+  };
 
   return (
     <div
       style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem" }}
       onClick={onClose}
     >
-      {/* Blurred backdrop */}
       <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", background: "rgba(10,10,15,0.78)" }} />
 
       <div
         style={{ position: "relative", background: "linear-gradient(145deg,#14121f,#0e0c18)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 28, padding: "2.5rem", maxWidth: 640, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 40px 100px rgba(0,0,0,0.6),0 0 0 1px rgba(124,58,237,0.1),inset 0 1px 0 rgba(255,255,255,0.06)", animation: "matchModalIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Animated top bar */}
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, borderRadius: "28px 28px 0 0", background: "linear-gradient(90deg,#7c3aed,#a78bfa,#f97316,#a78bfa,#7c3aed)", backgroundSize: "200% 100%", animation: "shimmerBar 3s linear infinite" }} />
 
         {/* Header */}
@@ -81,9 +125,9 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
               <div style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: 3, textTransform: "uppercase", color: "#a78bfa" }}>Matchmaker</div>
             </div>
             <h2 style={{ fontFamily: "var(--serif)", fontSize: "1.6rem", fontWeight: 700, letterSpacing: -0.8, lineHeight: 1.1, color: "rgba(255,255,255,0.95)" }}>
-              Find your <em style={{ fontStyle: "italic", color: "#a78bfa" }}>people.</em>
+              {results ? "Your " : "Find your "}<em style={{ fontStyle: "italic", color: "#a78bfa" }}>{results ? "matches." : "people."}</em>
             </h2>
-            <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.4)", marginTop: "0.4rem", lineHeight: 1.6 }}>Pick what you're looking for and how many — we'll rank by closest overlap.</p>
+            {!results && <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.4)", marginTop: "0.4rem", lineHeight: 1.6 }}>Pick what you're looking for and how many — we'll rank by closest overlap.</p>}
           </div>
           <button
             onClick={onClose}
@@ -95,101 +139,203 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* ── Section 1: Match Type ── */}
-        <div style={{ marginBottom: "2rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1rem" }}>
-            <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#a78bfa", flexShrink: 0 }}>1</div>
-            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>What are you looking for?</span>
-            <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.3)", fontWeight: 500 }}>Select all that apply</span>
-            {selected.length > 0 && (
-              <span style={{ marginLeft: "auto", fontSize: "0.65rem", fontWeight: 700, color: "#a78bfa", background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 100, padding: "0.1rem 0.55rem", flexShrink: 0 }}>{selected.length} selected</span>
-            )}
+        {/* ── Searching state ── */}
+        {searching && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem", padding: "3rem 1rem" }}>
+            <div style={{ position: "relative" }}>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", border: "2px solid rgba(124,58,237,0.2)", borderTop: "2px solid #a78bfa", animation: "spin 0.8s linear infinite" }} />
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontFamily: "var(--serif)", fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.4rem" }}>Comparing vectors…</div>
+              <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.4)", lineHeight: 1.6 }}>
+                Snowflake Cortex is searching through {count.toLocaleString()} candidates<br />
+                using your 768-dim personality embedding
+              </div>
+            </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
-            {MATCH_TYPES.map(type => {
-              const isOn = selected.includes(type.id);
-              return (
-                <button
-                  key={type.id}
-                  onClick={() => toggle(type.id)}
-                  style={{ background: isOn ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.03)", border: `1px solid ${isOn ? "rgba(124,58,237,0.55)" : "rgba(255,255,255,0.07)"}`, borderRadius: 14, padding: "0.9rem 1rem", cursor: "pointer", textAlign: "left", transition: "all 0.2s", position: "relative", overflow: "hidden" }}
-                  onMouseEnter={e => { if (!isOn) { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.3)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.06)"; } }}
-                  onMouseLeave={e => { if (!isOn) { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.03)"; } }}
-                >
-                  {isOn && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#7c3aed,#a78bfa)", borderRadius: "14px 14px 0 0" }} />}
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
-                    <div>
-                      <div style={{ fontSize: "0.88rem", fontWeight: 700, color: isOn ? "white" : "rgba(255,255,255,0.75)", marginBottom: "0.25rem" }}>{type.label}</div>
-                      <div style={{ fontSize: "0.72rem", color: isOn ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.38)", lineHeight: 1.5 }}>{type.desc}</div>
-                    </div>
-                    <div style={{ width: 18, height: 18, borderRadius: 6, border: `1.5px solid ${isOn ? "#a78bfa" : "rgba(255,255,255,0.15)"}`, background: isOn ? "rgba(124,58,237,0.3)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2, transition: "all 0.2s" }}>
-                      {isOn && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+        )}
+
+        {/* ── Results view ── */}
+        {results && !searching && (
+          <>
+            {results.length === 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem", padding: "2.5rem 1rem", textAlign: "center" }}>
+                <div style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                </div>
+                <div style={{ fontFamily: "var(--serif)", fontSize: "1.1rem", fontWeight: 700 }}>No matches found yet</div>
+                <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.4)", lineHeight: 1.6, maxWidth: 320 }}>
+                  There aren't enough users in this pool yet. Try again later or expand your search criteria.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <div style={{ fontSize: "0.65rem", fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: "0.25rem" }}>
+                  {results.length} {results.length === 1 ? "match" : "matches"} found · {selected.map(s => MATCH_TYPES.find(t => t.id === s)?.label).filter(Boolean).join(", ")}
+                </div>
+                {results.map((match, i) => (
+                  <div
+                    key={match.auth0_id}
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "1.15rem 1.25rem", position: "relative", overflow: "hidden", transition: "border-color 0.2s" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(124,58,237,0.35)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+                  >
+                    <div style={{ position: "absolute", top: 0, left: 0, width: 3, height: "100%", background: `linear-gradient(to bottom, #7c3aed, transparent)`, opacity: 1 - i * 0.25, borderRadius: "16px 0 0 16px" }} />
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "0.85rem" }}>
+                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "0.75rem", color: "white", flexShrink: 0 }}>
+                        #{i + 1}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                          <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.9)" }}>
+                            Match #{i + 1}
+                          </span>
+                          <span style={{ fontSize: "0.6rem", fontWeight: 600, color: "#22c55e", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 100, padding: "0.08rem 0.45rem" }}>
+                            Vector Match
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.55)", lineHeight: 1.65 }}>
+                          {match.match_blurb}
+                        </div>
+                        {match.summary && (
+                          <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)", marginTop: "0.4rem", fontStyle: "italic" }}>
+                            {match.summary}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 0 2rem" }} />
-
-        {/* ── Section 2: How Many ── */}
-        <div style={{ marginBottom: "2rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.25rem" }}>
-            <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#a78bfa", flexShrink: 0 }}>2</div>
-            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>How many matches do you want?</span>
-            {count > 0 && (
-              <span style={{ marginLeft: "auto", fontSize: "0.65rem", fontWeight: 700, color: count <= 3 ? "#22c55e" : count <= 7 ? "#fbbf24" : "#f97316", background: count <= 3 ? "rgba(34,197,94,0.08)" : count <= 7 ? "rgba(251,191,36,0.08)" : "rgba(249,115,22,0.08)", border: `1px solid ${count <= 3 ? "rgba(34,197,94,0.2)" : count <= 7 ? "rgba(251,191,36,0.2)" : "rgba(249,115,22,0.2)"}`, borderRadius: 100, padding: "0.1rem 0.55rem", flexShrink: 0 }}>{count} {count === 1 ? "match" : "matches"}</span>
+                ))}
+              </div>
             )}
-          </div>
 
-          {/* Counter */}
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", marginBottom: "1.1rem" }}>
-            <button
-              onClick={() => setCount(c => Math.max(0, c - 1))}
-              style={{ width: 48, height: 48, borderRadius: 14, background: count === 0 ? "rgba(255,255,255,0.02)" : "rgba(124,58,237,0.08)", border: `1px solid ${count === 0 ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.3)"}`, cursor: count === 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: count === 0 ? "rgba(255,255,255,0.18)" : "#a78bfa", fontSize: "1.4rem", fontWeight: 300, transition: "all 0.2s", flexShrink: 0 }}
-            >−</button>
-            <div style={{ flex: 1, textAlign: "center", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: "1rem" }}>
-              <div style={{ fontFamily: "var(--serif)", fontSize: "3.5rem", fontWeight: 700, letterSpacing: -3, color: count === 0 ? "rgba(255,255,255,0.12)" : "#a78bfa", lineHeight: 1, transition: "color 0.3s" }}>{count}</div>
-              <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.25)", fontWeight: 700, letterSpacing: 2, marginTop: "0.2rem" }}>MATCHES</div>
-            </div>
-            <button
-              onClick={() => setCount(c => Math.min(20, c + 1))}
-              style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.3)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#a78bfa", fontSize: "1.4rem", fontWeight: 300, transition: "all 0.2s", flexShrink: 0 }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.18)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.08)"; }}
-            >+</button>
-          </div>
-
-          {/* Quick presets */}
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            {[1, 3, 5, 10].map(n => (
+            {/* Back + Close buttons */}
+            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
               <button
-                key={n}
-                onClick={() => setCount(n)}
-                style={{ flex: 1, padding: "0.55rem", borderRadius: 10, border: `1px solid ${count === n ? "rgba(124,58,237,0.55)" : "rgba(255,255,255,0.07)"}`, background: count === n ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.03)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, color: count === n ? "#a78bfa" : "rgba(255,255,255,0.38)", transition: "all 0.2s", fontFamily: "var(--font)" }}
-              >{n}</button>
-            ))}
-          </div>
-        </div>
+                onClick={handleBack}
+                style={{ flex: 1, padding: "0.85rem", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.7)", fontFamily: "var(--font)", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
+              >
+                ← Search again
+              </button>
+              <button
+                onClick={onClose}
+                style={{ flex: 1, padding: "0.85rem", borderRadius: 14, border: "none", background: "linear-gradient(135deg,#7c3aed,#9333ea)", color: "white", fontFamily: "var(--font)", fontSize: "0.88rem", fontWeight: 700, cursor: "pointer", transition: "all 0.2s", boxShadow: "0 4px 16px rgba(124,58,237,0.3)" }}
+              >
+                Done
+              </button>
+            </div>
+          </>
+        )}
 
-        {/* CTA */}
-        <button
-          disabled={!canSearch}
-          style={{ width: "100%", padding: "1rem", borderRadius: 14, border: "none", background: canSearch ? "linear-gradient(135deg,#7c3aed,#9333ea)" : "rgba(255,255,255,0.05)", color: canSearch ? "white" : "rgba(255,255,255,0.22)", fontFamily: "var(--font)", fontSize: "0.95rem", fontWeight: 700, cursor: canSearch ? "pointer" : "not-allowed", transition: "all 0.3s", boxShadow: canSearch ? "0 6px 24px rgba(124,58,237,0.4)" : "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem" }}
-          onMouseEnter={e => { if (canSearch) { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 10px 32px rgba(124,58,237,0.55)"; } }}
-          onMouseLeave={e => { if (canSearch) { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 24px rgba(124,58,237,0.4)"; } }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          {canSearch ? `Find ${count} ${count === 1 ? "match" : "matches"} →` : "Select a type & count to search"}
-        </button>
+        {/* ── Config view (not searching, no results) ── */}
+        {!searching && !results && (
+          <>
+            {/* ── Section 1: Match Type ── */}
+            <div style={{ marginBottom: "2rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1rem" }}>
+                <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#a78bfa", flexShrink: 0 }}>1</div>
+                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>What are you looking for?</span>
+                <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.3)", fontWeight: 500 }}>Select all that apply</span>
+                {selected.length > 0 && (
+                  <span style={{ marginLeft: "auto", fontSize: "0.65rem", fontWeight: 700, color: "#a78bfa", background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 100, padding: "0.1rem 0.55rem", flexShrink: 0 }}>{selected.length} selected</span>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+                {MATCH_TYPES.map(type => {
+                  const isOn = selected.includes(type.id);
+                  return (
+                    <button
+                      key={type.id}
+                      onClick={() => toggle(type.id)}
+                      style={{ background: isOn ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.03)", border: `1px solid ${isOn ? "rgba(124,58,237,0.55)" : "rgba(255,255,255,0.07)"}`, borderRadius: 14, padding: "0.9rem 1rem", cursor: "pointer", textAlign: "left", transition: "all 0.2s", position: "relative", overflow: "hidden" }}
+                      onMouseEnter={e => { if (!isOn) { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.3)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.06)"; } }}
+                      onMouseLeave={e => { if (!isOn) { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.03)"; } }}
+                    >
+                      {isOn && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#7c3aed,#a78bfa)", borderRadius: "14px 14px 0 0" }} />}
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+                        <div>
+                          <div style={{ fontSize: "0.88rem", fontWeight: 700, color: isOn ? "white" : "rgba(255,255,255,0.75)", marginBottom: "0.25rem" }}>{type.label}</div>
+                          <div style={{ fontSize: "0.72rem", color: isOn ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.38)", lineHeight: 1.5 }}>{type.desc}</div>
+                        </div>
+                        <div style={{ width: 18, height: 18, borderRadius: 6, border: `1.5px solid ${isOn ? "#a78bfa" : "rgba(255,255,255,0.15)"}`, background: isOn ? "rgba(124,58,237,0.3)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2, transition: "all 0.2s" }}>
+                          {isOn && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-        {!canSearch && (
-          <p style={{ textAlign: "center", fontSize: "0.7rem", color: "rgba(255,255,255,0.18)", marginTop: "0.65rem" }}>
-            {selected.length === 0 && count === 0 ? "Pick at least one type and set a count above" : selected.length === 0 ? "Pick at least one match type above" : "Set how many matches you want"}
-          </p>
+            <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 0 2rem" }} />
+
+            {/* ── Section 2: How Many ── */}
+            <div style={{ marginBottom: "2rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.25rem" }}>
+                <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#a78bfa", flexShrink: 0 }}>2</div>
+                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>How many matches do you want?</span>
+                {count > 0 && (
+                  <span style={{ marginLeft: "auto", fontSize: "0.65rem", fontWeight: 700, color: count <= 3 ? "#22c55e" : count <= 7 ? "#fbbf24" : "#f97316", background: count <= 3 ? "rgba(34,197,94,0.08)" : count <= 7 ? "rgba(251,191,36,0.08)" : "rgba(249,115,22,0.08)", border: `1px solid ${count <= 3 ? "rgba(34,197,94,0.2)" : count <= 7 ? "rgba(251,191,36,0.2)" : "rgba(249,115,22,0.2)"}`, borderRadius: 100, padding: "0.1rem 0.55rem", flexShrink: 0 }}>{count} {count === 1 ? "match" : "matches"}</span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", marginBottom: "1.1rem" }}>
+                <button
+                  onClick={() => setCount(c => Math.max(0, c - 1))}
+                  style={{ width: 48, height: 48, borderRadius: 14, background: count === 0 ? "rgba(255,255,255,0.02)" : "rgba(124,58,237,0.08)", border: `1px solid ${count === 0 ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.3)"}`, cursor: count === 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: count === 0 ? "rgba(255,255,255,0.18)" : "#a78bfa", fontSize: "1.4rem", fontWeight: 300, transition: "all 0.2s", flexShrink: 0 }}
+                >−</button>
+                <div style={{ flex: 1, textAlign: "center", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: "1rem" }}>
+                  <div style={{ fontFamily: "var(--serif)", fontSize: "3.5rem", fontWeight: 700, letterSpacing: -3, color: count === 0 ? "rgba(255,255,255,0.12)" : "#a78bfa", lineHeight: 1, transition: "color 0.3s" }}>{count}</div>
+                  <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.25)", fontWeight: 700, letterSpacing: 2, marginTop: "0.2rem" }}>MATCHES</div>
+                </div>
+                <button
+                  onClick={() => setCount(c => Math.min(20, c + 1))}
+                  style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.3)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#a78bfa", fontSize: "1.4rem", fontWeight: 300, transition: "all 0.2s", flexShrink: 0 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.18)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.08)"; }}
+                >+</button>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                {[1, 3, 5, 10].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setCount(n)}
+                    style={{ flex: 1, padding: "0.55rem", borderRadius: 10, border: `1px solid ${count === n ? "rgba(124,58,237,0.55)" : "rgba(255,255,255,0.07)"}`, background: count === n ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.03)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, color: count === n ? "#a78bfa" : "rgba(255,255,255,0.38)", transition: "all 0.2s", fontFamily: "var(--font)" }}
+                  >{n}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Error banner */}
+            {error && (
+              <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 12, padding: "0.85rem 1.1rem", marginBottom: "1.25rem", display: "flex", gap: "0.65rem", alignItems: "center" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span style={{ fontSize: "0.8rem", color: "rgba(239,68,68,0.85)", lineHeight: 1.5 }}>{error}</span>
+              </div>
+            )}
+
+            {/* CTA */}
+            <button
+              disabled={!canSearch}
+              onClick={handleSearch}
+              style={{ width: "100%", padding: "1rem", borderRadius: 14, border: "none", background: canSearch ? "linear-gradient(135deg,#7c3aed,#9333ea)" : "rgba(255,255,255,0.05)", color: canSearch ? "white" : "rgba(255,255,255,0.22)", fontFamily: "var(--font)", fontSize: "0.95rem", fontWeight: 700, cursor: canSearch ? "pointer" : "not-allowed", transition: "all 0.3s", boxShadow: canSearch ? "0 6px 24px rgba(124,58,237,0.4)" : "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem" }}
+              onMouseEnter={e => { if (canSearch) { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 10px 32px rgba(124,58,237,0.55)"; } }}
+              onMouseLeave={e => { if (canSearch) { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 24px rgba(124,58,237,0.4)"; } }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              {canSearch ? `Find ${count} ${count === 1 ? "match" : "matches"} →` : "Select a type & count to search"}
+            </button>
+
+            {!canSearch && !searching && (
+              <p style={{ textAlign: "center", fontSize: "0.7rem", color: "rgba(255,255,255,0.18)", marginTop: "0.65rem" }}>
+                {selected.length === 0 && count === 0 ? "Pick at least one type and set a count above" : selected.length === 0 ? "Pick at least one match type above" : "Set how many matches you want"}
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -283,16 +429,45 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleFile = (file: File | null) => {
+  const handleFile = async (file: File | null) => {
     if (!file) return;
     if (!file.name.endsWith(".json")) { setFileError("Only .json files are accepted. Please export your Gemini data as JSON."); return; }
     setFileError("");
     setUploading(true);
-    setTimeout(() => {
+
+    try {
+      const userId = user?.sub ?? "anonymous";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("user_id", userId);
+      formData.append("server_id", "general");
+
+      const res = await fetch(`${backendUrl}/extract`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+        setFileError(err.detail || "Upload failed. Please try again.");
+        setUploading(false);
+        return;
+      }
+
+      const data = await res.json();
       const now = new Date();
       localStorage.setItem("dfs_uploaded_at", now.toISOString());
-      setHasData(true); setUploadedAt(now); setUploading(false); setActiveTab("chart");
-    }, 1800);
+      if (data.message_count) localStorage.setItem("dfs_message_count", String(data.message_count));
+      setHasData(true);
+      setUploadedAt(now);
+      setActiveTab("chart");
+    } catch (e) {
+      setFileError(e instanceof Error ? e.message : "Failed to connect to backend. Is it running?");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleWrongFile = () => setWrongFileOverride(true);
@@ -477,16 +652,15 @@ export default function Dashboard() {
       {showMatchMaker && <MatchMakerModal onClose={() => setShowMatchMaker(false)} />}
 
       {/* NAV */}
-      <nav className="dash-nav">
+        <nav className="dash-nav">
         <a href="/" className="dash-logo"><div className="logo-dot" />DFS</a>
         <div className="nav-right">
             <NavWalletDropdown buttonClassName="wallet-nav-btn" />
-
+            <span className="nav-email">{user.email}</span>
             <a href="/auth/logout" className="logout-btn">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                 Log out
             </a>
-
             <div className="nav-avatar">
                 {user.picture ? <img src={user.picture} alt={displayName} /> : initials}
             </div>
@@ -494,10 +668,11 @@ export default function Dashboard() {
       </nav>
 
       <main className="dash-main">
+        {/* PAGE HEADER */}
         <div className="page-header">
           <div className="page-eyebrow">Your Dashboard</div>
           <h1 className="page-title">Welcome back, <em>{firstName}</em></h1>
-        </div>
+          </div>
 
         <div className="dash-grid">
 
@@ -529,7 +704,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="profile-divider" />
+                <div className="profile-divider" />
 
               <div className="profile-stats">
                 {[{val:"—",lbl:"Matches"},{val:"—",lbl:"Score"},{val:"0",lbl:"Chats"}].map(s => (
@@ -707,10 +882,10 @@ export default function Dashboard() {
                 <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>No transactions yet</div>
                 <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>Connect your wallet and complete matches to see activity</div>
               </div>
+              </div>
             </div>
           </div>
-        </div>
-      </main>
+        </main>
     </>
   );
 }

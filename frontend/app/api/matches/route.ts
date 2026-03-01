@@ -1,43 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { findMatches } from "@/lib/snowflake";
-import { generateMatchBlurb } from "@/lib/gemini-blurb";
+import { findSmartMatches, getUserEmbedding } from "@/lib/snowflake";
+import {
+  generateMatchBlurbFromArchetypes,
+  generateMatchBlurb,
+} from "@/lib/gemini-blurb";
 
-const SNOWFLAKE_VECTOR_DIM = 768;
-
-function toVector768(raw: unknown): number[] {
-  if (Array.isArray(raw)) {
-    const nums = raw.map(Number).filter((n) => !Number.isNaN(n));
-    if (nums.length >= SNOWFLAKE_VECTOR_DIM) return nums.slice(0, SNOWFLAKE_VECTOR_DIM);
-    return [...nums, ...Array(SNOWFLAKE_VECTOR_DIM - nums.length).fill(0)];
-  }
-  if (typeof raw === "string") {
-    try {
-      const parsed = JSON.parse(raw) as number[];
-      return toVector768(parsed);
-    } catch {
-      return Array(SNOWFLAKE_VECTOR_DIM).fill(0);
-    }
-  }
-  return Array(SNOWFLAKE_VECTOR_DIM).fill(0);
-}
+const DEFAULT_TOP_N = 3;
+const MAX_TOP_N = 20;
 
 /**
  * GET /api/matches
- * - No query: returns existing matches for the current user (Supabase).
- * - ?server_id=xxx: discovery flow — fetch user vector, flagged users, Snowflake findMatches, Gemini blurbs.
+ * - No query params: returns existing matches for the current user (Supabase).
+ * - ?server_id=xxx: discovery — fetch user's 768-dim embedding from Snowflake,
+ *   call Cortex Search with server_id filter and is_flagged=FALSE.
+ * - ?top_n=N: override number of matches (default 3, max 20).
+ * - ?context=hackathon,friend: comma-separated match type labels (passed to blurb gen).
  * All paths require Auth0 session.
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth0.getSession();
+    const session = await auth0.getSession(req);
     if (!session?.user?.sub) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
     const userId = session.user.sub;
     const serverId = req.nextUrl.searchParams.get("server_id");
+    const topNParam = req.nextUrl.searchParams.get("top_n");
+    const contextParam = req.nextUrl.searchParams.get("context");
+    const topN = Math.min(
+      Math.max(1, parseInt(topNParam ?? "", 10) || DEFAULT_TOP_N),
+      MAX_TOP_N
+    );
 
     if (!serverId) {
       const { data, error } = await supabaseAdmin
@@ -52,59 +48,83 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ matches: data ?? [] });
     }
 
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("archetype_vector, summary")
-      .eq("id", userId)
-      .single();
-
-    if (profileError || !profile) {
+    let vector = await getUserEmbedding(userId, serverId);
+    if (!vector && serverId !== "general") {
+      vector = await getUserEmbedding(userId, "general");
+    }
+    if (!vector) {
       return NextResponse.json(
-        { error: "Profile or vector not found. Complete your profile first." },
+        {
+          error:
+            "Embedding not found in Snowflake. Upload your Takeout data first.",
+        },
         { status: 400 }
       );
     }
 
-    const vector = toVector768(profile.archetype_vector);
-    const currentSummary = (profile as { summary?: string }).summary ?? "";
-
-    const { data: flaggedRows } = await supabaseAdmin
+    const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("id")
-      .eq("is_flagged", true);
-    const flaggedIds = (flaggedRows ?? []).map((r) => r.id as string);
+      .select("archetype_json, summary")
+      .eq("id", userId)
+      .single();
+
+    const userArchetype =
+      (profile as { archetype_json?: string | Record<string, unknown> } | null)
+        ?.archetype_json ?? null;
+    const userSummary =
+      (profile as { summary?: string } | null)?.summary ?? "";
+
+    const blurbContext = contextParam || serverId;
 
     let matchedAuth0Ids: string[];
     try {
-      matchedAuth0Ids = await findMatches(serverId, vector, [...flaggedIds, userId]);
+      matchedAuth0Ids = await findSmartMatches(vector, serverId, topN);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Snowflake error";
+      const msg =
+        e instanceof Error ? e.message : "Snowflake Cortex Search error";
       return NextResponse.json(
         { error: "Matching unavailable", details: msg },
         { status: 503 }
       );
     }
 
-    if (matchedAuth0Ids.length === 0) {
+    const excludeSelf = matchedAuth0Ids.filter((id) => id !== userId);
+    if (excludeSelf.length === 0) {
       return NextResponse.json({ suggestedMatches: [] });
     }
 
     const { data: matchedProfiles } = await supabaseAdmin
       .from("profiles")
-      .select("id, summary")
-      .in("id", matchedAuth0Ids);
+      .select("id, archetype_json, summary")
+      .in("id", excludeSelf);
 
     const suggestedMatches = await Promise.all(
       (matchedProfiles ?? []).map(async (p) => {
+        const matchArchetype =
+          (p as { archetype_json?: string | Record<string, unknown> })
+            .archetype_json ?? null;
         const matchSummary = (p as { summary?: string }).summary ?? "";
         let matchBlurb = "You two should connect.";
         try {
-          matchBlurb = await generateMatchBlurb(currentSummary, matchSummary, "server");
+          if (userArchetype || matchArchetype) {
+            matchBlurb = await generateMatchBlurbFromArchetypes(
+              userArchetype,
+              matchArchetype,
+              blurbContext
+            );
+          } else {
+            matchBlurb = await generateMatchBlurb(
+              userSummary,
+              matchSummary,
+              blurbContext
+            );
+          }
         } catch {
-          // keep default blurb
+          // keep default
         }
         return {
           auth0_id: p.id,
+          archetype_json: matchArchetype,
           summary: matchSummary,
           match_blurb: matchBlurb,
         };

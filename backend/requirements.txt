@@ -16,3 +16,6 @@ python-multipart
 python-dotenv
 google-genai
 snowflake-connector-python[pandas]
+supabase
+solders
+requests

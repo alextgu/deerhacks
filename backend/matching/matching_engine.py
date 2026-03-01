@@ -57,7 +57,72 @@ def _reconstruct_vector_dict(scores_json: dict, evidence_json: dict | None) -> d
     }
 
 
-# ── Upsert User Archetype ──────────────────────────────────────────────────
+# ── Raw Corpus + Cortex Embedding  ────────────────────────────────────────
+
+def upsert_raw_corpus(user_id: str, cleaned_corpus: str) -> None:
+    """Write the cleaned Takeout corpus into raw_user_onboarding for Cortex embedding."""
+    conn = _get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            MERGE INTO RAW_USER_ONBOARDING tgt
+            USING (SELECT %(user_id)s AS auth0_id, %(corpus)s AS cleaned_corpus) src
+            ON tgt.auth0_id = src.auth0_id
+            WHEN MATCHED THEN UPDATE SET
+                cleaned_corpus = src.cleaned_corpus,
+                updated_at     = CURRENT_TIMESTAMP()
+            WHEN NOT MATCHED THEN INSERT (auth0_id, cleaned_corpus)
+                VALUES (src.auth0_id, src.cleaned_corpus)
+            """,
+            {"user_id": user_id, "corpus": cleaned_corpus},
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def embed_and_upsert_archetype(user_id: str, server_id: str = "general") -> None:
+    """
+    Generate a 768-dim embedding from the user's cleaned_corpus in raw_user_onboarding
+    via SNOWFLAKE.CORTEX.EMBED_TEXT_768, then insert/update user_archetypes.
+    """
+    conn = _get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            MERGE INTO USER_ARCHETYPES tgt
+            USING (
+                SELECT
+                    auth0_id,
+                    %(server_id)s AS server_id,
+                    SNOWFLAKE.CORTEX.EMBED_TEXT_768(
+                        'snowflake-arctic-embed-m',
+                        cleaned_corpus
+                    ) AS embedding,
+                    'Analyzed Persona' AS archetype_label
+                FROM RAW_USER_ONBOARDING
+                WHERE auth0_id = %(user_id)s
+            ) src
+            ON tgt.user_id = src.auth0_id AND tgt.server_id = src.server_id
+            WHEN MATCHED THEN UPDATE SET
+                archetype_vector = src.embedding,
+                updated_at       = CURRENT_TIMESTAMP()
+            WHEN NOT MATCHED THEN INSERT (
+                user_id, server_id, archetype_vector
+            ) VALUES (
+                src.auth0_id, src.server_id, src.embedding
+            )
+            """,
+            {"user_id": user_id, "server_id": server_id},
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ── Upsert User Archetype (Legacy 50-dim) ────────────────────────────────
 
 def upsert_archetype(
     user_id: str,
@@ -120,7 +185,91 @@ def upsert_archetype(
         conn.close()
 
 
-# ── Phase 1: Vector Candidate Retrieval (Snowflake) ────────────────────────
+# ── Phase 1a: Cortex Search (768-dim, unified with frontend) ─────────────────
+
+CORTEX_SERVICE = os.environ.get("CORTEX_SEARCH_SERVICE_NAME", "ARCHETYPE_MATCH_SERVICE")
+CORTEX_VECTOR_INDEX = os.environ.get("CORTEX_SEARCH_VECTOR_INDEX", "archetype_vector")
+VECTOR_DIM_768 = 768
+
+
+def get_user_embedding_768(auth0_id: str, server_id: str = "general") -> list[float] | None:
+    """Fetch the user's 768-dim embedding from Snowflake (unified user_archetypes table)."""
+    conn = _get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT archetype_vector::ARRAY AS emb
+            FROM user_archetypes
+            WHERE user_id = %(auth0_id)s AND server_id = %(server_id)s
+            LIMIT 1
+            """,
+            {"auth0_id": auth0_id, "server_id": server_id},
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        raw = row[0]
+        if not raw or len(raw) != VECTOR_DIM_768:
+            return None
+        return [float(x) for x in raw]
+    finally:
+        conn.close()
+
+
+def _fetch_candidates_cortex(
+    user_vector_768: list[float],
+    server_id: str,
+    exclude_auth0_id: str,
+    limit: int = 20,
+) -> list[dict]:
+    """
+    Phase 1 via Snowflake Cortex Search (same as frontend).
+    Returns list of {"auth0_id": str, "score": float} for matching.
+    """
+    query_payload = {
+        "multi_index_query": {
+            CORTEX_VECTOR_INDEX: [{"vector": user_vector_768}],
+        },
+        "filter": {
+            "@and": [
+                {"@eq": {"server_id": server_id}},
+                {"@eq": {"is_flagged": False}},
+            ],
+        },
+        "columns": ["user_id"],
+        "limit": limit,
+    }
+    query_json = json.dumps(query_payload)
+
+    conn = _get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW(%s, %s))['results'] AS results
+            """,
+            (CORTEX_SERVICE, query_json),
+        )
+        row = cur.fetchone()
+        raw = row[0] if row else None
+        if not raw or not isinstance(raw, (list, str)):
+            return []
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        results = []
+        for r in raw:
+            aid = r.get("user_id") or r.get("USER_ID") or r.get("auth0_id") or r.get("AUTH0_ID")
+            if not aid or aid == exclude_auth0_id:
+                continue
+            score = float(r.get("score", r.get("SCORE", 0.0)))
+            results.append({"auth0_id": aid, "score": score})
+        return results[:limit]
+    finally:
+        conn.close()
+
+
+# ── Phase 1b: Legacy 50-dim Vector Candidate Retrieval ──────────────────────
 
 def _fetch_candidates(
     user_vector: list[float],
@@ -129,8 +278,8 @@ def _fetch_candidates(
     limit: int = 20,
 ) -> list[dict]:
     """
-    SQL phase: VECTOR_COSINE_SIMILARITY scan, server-scoped,
-    flagged users excluded.
+    Legacy SQL phase: VECTOR_COSINE_SIMILARITY on 50-dim USER_ARCHETYPES,
+    server-scoped, flagged users excluded. Use Cortex path when 768-dim available.
     """
     conn = _get_connection()
     try:
@@ -374,6 +523,67 @@ def get_matches(
         "server_id": server_id,
         "matches": output,
         "candidate_pool_size": len(candidates),
+    }
+
+
+def get_matches_cortex(
+    auth0_id: str,
+    server_id: str,
+    context: str,
+    top_n: int = 10,
+    include_blurbs: bool = False,
+    api_key: Optional[str] = None,
+) -> dict:
+    """
+    Matching pipeline using Snowflake Cortex Search only (same vector comparison
+    as the frontend). No 50-dim data or Python re-rank; vector comparison is
+    entirely in Snowflake.
+    """
+    assert context in ("hackathon", "romantic", "friendship")
+
+    embedding = get_user_embedding_768(auth0_id, server_id)
+    if not embedding:
+        return {
+            "user_id": auth0_id,
+            "context": context,
+            "server_id": server_id,
+            "matches": [],
+            "candidate_pool_size": 0,
+            "source": "cortex",
+        }
+
+    candidates = _fetch_candidates_cortex(
+        user_vector_768=embedding,
+        server_id=server_id,
+        exclude_auth0_id=auth0_id,
+        limit=top_n,
+    )
+
+    output = []
+    for c in candidates:
+        output.append({
+            "user_id": c["auth0_id"],
+            "cosine_score": round(c["score"], 4),
+            "weighted_score": None,
+            "grade": None,
+            "dimension_scores": None,
+            "top_strengths": None,
+            "top_tensions": None,
+            "clash_penalties": None,
+            "bonuses": None,
+            "red_flags": None,
+            "dangerous_deltas": None,
+            "reputation_score": None,
+            "blurb": None,
+        })
+
+    return {
+        "user_id": auth0_id,
+        "context": context,
+        "server_id": server_id,
+        "matches": output,
+        "candidate_pool_size": len(candidates),
+        "source": "cortex",
     }
 
 
