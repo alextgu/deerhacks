@@ -111,6 +111,16 @@ export default function Dashboard() {
         }
         .logout-btn:hover { border-color: rgba(239,68,68,0.4); color: rgba(239,68,68,0.8); }
 
+        .wallet-nav-btn {
+          background: none; border: 1px solid rgba(124,58,237,0.35);
+          color: var(--v2); border-radius: 8px;
+          padding: 0.4rem 0.9rem; font-family: var(--font);
+          font-size: 0.8rem; font-weight: 600; cursor: pointer;
+          transition: all 0.2s; text-decoration: none;
+          display: flex; align-items: center; gap: 0.4rem;
+        }
+        .wallet-nav-btn:hover { border-color: var(--v2); background: rgba(124,58,237,0.08); }
+
         .dash-main { padding: 3rem; max-width: 1200px; margin: 0 auto; width: 100%; }
 
         .welcome-row {
@@ -266,12 +276,84 @@ export default function Dashboard() {
         .badge-pending { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
         .badge-soon { background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid rgba(255,255,255,0.08); }
 
+        /* WALLET SECTION */
+        .wallet-section { margin-top: 2rem; }
+        .wallet-header { margin-bottom: 1.5rem; }
+        .wallet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .wallet-card {
+          background: var(--dark2); border: 1px solid var(--border);
+          border-radius: 22px; padding: 2rem;
+          animation: fadeUp 0.6s ease 0.25s forwards; opacity: 0;
+          position: relative; overflow: hidden;
+          transition: border-color 0.2s, transform 0.2s;
+        }
+        .wallet-card:hover { border-color: rgba(124,58,237,0.3); transform: translateY(-2px); }
+        .wallet-card-full {
+          grid-column: 1 / -1;
+          background: var(--dark2); border: 1px solid var(--border);
+          border-radius: 22px; padding: 2rem;
+          animation: fadeUp 0.6s ease 0.3s forwards; opacity: 0;
+        }
+        .wallet-balance-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
+        .wallet-balance-val { font-family: var(--serif); font-size: 2.8rem; font-weight: 700; letter-spacing: -2px; color: var(--text); }
+        .wallet-balance-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; font-weight: 500; }
+        .wallet-connect-btn {
+          margin-top: 1.25rem;
+          background: linear-gradient(135deg, var(--v), #9333ea);
+          color: white; border: none; border-radius: 10px;
+          padding: 0.75rem 1.5rem; font-family: var(--font);
+          font-size: 0.85rem; font-weight: 700; cursor: pointer;
+          transition: all 0.25s; box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+          display: flex; align-items: center; gap: 0.5rem;
+        }
+        .wallet-connect-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(124,58,237,0.45); }
+        .wallet-stat-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
+        .wallet-stat-val { font-family: var(--serif); font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; }
+        .wallet-stat-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.25rem; }
+        .wallet-tx-row {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 0.85rem 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+          font-size: 0.82rem;
+        }
+        .wallet-tx-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .wallet-tx-left { display: flex; align-items: center; gap: 0.75rem; }
+        .wallet-tx-icon {
+          width: 32px; height: 32px; border-radius: 10px;
+          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0;
+        }
+        .wallet-tx-name { font-weight: 600; color: rgba(255,255,255,0.85); }
+        .wallet-tx-date { font-size: 0.7rem; color: var(--muted); margin-top: 0.1rem; }
+        .wallet-tx-amount { font-weight: 700; font-size: 0.85rem; }
+        .wallet-empty {
+          display: flex; flex-direction: column; align-items: center;
+          gap: 0.75rem; padding: 2rem; text-align: center;
+          color: var(--muted);
+        }
+        .wallet-empty-icon {
+          width: 48px; height: 48px; border-radius: 14px;
+          background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.15);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .wallet-address {
+          font-family: monospace; font-size: 0.75rem;
+          color: var(--muted); background: rgba(255,255,255,0.04);
+          border: 1px solid var(--border); border-radius: 8px;
+          padding: 0.5rem 0.85rem; margin-top: 0.75rem;
+          word-break: break-all;
+        }
+        .wallet-section-divider {
+          height: 1px; background: var(--border);
+          margin: 2.5rem 0;
+        }
+
         @media(max-width: 900px) {
           .dash-main { padding: 1.5rem; }
           .dash-nav { padding: 1rem 1.5rem; }
           .stats-row { grid-template-columns: 1fr; }
           .dash-grid { grid-template-columns: 1fr; }
           .welcome-row { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .wallet-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -282,6 +364,16 @@ export default function Dashboard() {
             DFS
           </a>
           <div className="dash-nav-right">
+            <button
+              className="wallet-nav-btn"
+              onClick={() => document.getElementById('wallet')?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="5" width="20" height="14" rx="2"/>
+                <path d="M16 12h.01"/>
+              </svg>
+              Wallet
+            </button>
             <span className="dash-nav-name">{user.email}</span>
             <div className="dash-avatar">
               {user.picture ? <img src={user.picture} alt={user.name || "User"} /> : initials}
@@ -409,6 +501,74 @@ export default function Dashboard() {
                     <span className={`status-badge ${item.cls}`}>{item.badge}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+          {/* WALLET SECTION */}
+          <div className="wallet-section-divider" />
+          <div id="wallet" className="wallet-section">
+            <div className="wallet-header">
+              <div className="welcome-pre">Solana · Devnet</div>
+              <h2 className="welcome-h1" style={{ fontSize: "clamp(1.5rem, 3vw, 2.2rem)" }}>
+                Your <em>Wallet</em>
+              </h2>
+            </div>
+
+            <div className="wallet-grid">
+              {/* BALANCE CARD */}
+              <div className="wallet-card" style={{ background: "linear-gradient(135deg, #1a0a3d, #0f0a1f)" }}>
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, var(--v), var(--v2))", borderRadius: "22px 22px 0 0" }} />
+                <div className="wallet-balance-label">Total Balance</div>
+                <div className="wallet-balance-val">0 <span style={{ fontSize: "1.2rem", color: "var(--muted)" }}>SOL</span></div>
+                <div className="wallet-balance-sub">≈ $0.00 USD · Devnet</div>
+                <button className="wallet-connect-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                  </svg>
+                  Connect Wallet
+                </button>
+              </div>
+
+              {/* REPUTATION CARD */}
+              <div className="wallet-card">
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, #f97316, transparent)", borderRadius: "22px 22px 0 0" }} />
+                <div className="wallet-stat-label">Reputation Score</div>
+                <div className="wallet-stat-val" style={{ color: "#f97316" }}>—</div>
+                <div className="wallet-stat-sub">Complete matches to earn reputation</div>
+
+                <div style={{ marginTop: "1.5rem" }}>
+                  <div className="wallet-stat-label" style={{ marginBottom: "0.75rem" }}>On-chain Activity</div>
+                  {[
+                    { label: "Matches completed", val: "0" },
+                    { label: "Connections made", val: "0" },
+                    { label: "Hackathons joined", val: "0" },
+                  ].map((row, i) => (
+                    <div key={i} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "0.5rem 0", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                      fontSize: "0.78rem",
+                    }}>
+                      <span style={{ color: "var(--muted)", fontWeight: 500 }}>{row.label}</span>
+                      <span style={{ fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>{row.val}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* TRANSACTION HISTORY */}
+              <div className="wallet-card-full">
+                <div className="wallet-stat-label" style={{ marginBottom: "1rem" }}>Transaction History</div>
+                <div className="wallet-empty">
+                  <div className="wallet-empty-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--v2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="5" width="20" height="14" rx="2"/>
+                      <path d="M16 12h.01"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>No transactions yet</div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>Connect your wallet and complete matches to see activity here</div>
+                </div>
               </div>
             </div>
           </div>
