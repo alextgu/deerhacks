@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { getDisplayName } from "@/lib/user-display";
 import { NavWalletDropdown } from "@/components/nav-wallet-dropdown";
+import { LoadingScreen } from "@/components/loading-screen";
 
 // ── Intersection observer hook ─────────────────────────────────────────────────
 function useInView(threshold = 0.15) {
@@ -294,7 +295,7 @@ export default function Home() {
     return () => cancelAnimationFrame(raf);
   }, [mouse]);
 
-  if (!mounted || !youT.length) return null;
+  if (!mounted || !youT.length) return <LoadingScreen />;
 
   return (
     <>

@@ -4,15 +4,26 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type RouteContext = { params: Promise<{ matchId: string }> };
 
-async function verifyParticipant(matchId: string, userId: string) {
+async function getMatch(matchId: string) {
   const { data } = await supabaseAdmin
     .from("matches")
-    .select("user_a, user_b")
+    .select("user_a, user_b, status, expires_at")
     .eq("id", matchId)
     .single();
+  return data as { user_a: string; user_b: string; status: string | null; expires_at: string | null } | null;
+}
 
+async function verifyParticipant(matchId: string, userId: string) {
+  const data = await getMatch(matchId);
   if (!data) return false;
   return data.user_a === userId || data.user_b === userId;
+}
+
+function isMatchEnded(match: { status: string | null; expires_at: string | null } | null) {
+  if (!match) return true;
+  if (match.status === "closed") return true;
+  if (match.expires_at && new Date(match.expires_at) <= new Date()) return true;
+  return false;
 }
 
 export async function GET(req: NextRequest, ctx: RouteContext) {
@@ -23,7 +34,8 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     }
 
     const { matchId } = await ctx.params;
-    if (!(await verifyParticipant(matchId, session.user.sub))) {
+    const match = await getMatch(matchId);
+    if (!(match && (match.user_a === session.user.sub || match.user_b === session.user.sub))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -60,8 +72,12 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     }
 
     const { matchId } = await ctx.params;
-    if (!(await verifyParticipant(matchId, session.user.sub))) {
+    const match = await getMatch(matchId);
+    if (!(match && (match.user_a === session.user.sub || match.user_b === session.user.sub))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (isMatchEnded(match)) {
+      return NextResponse.json({ error: "Chat has ended or expired" }, { status: 410 });
     }
 
     const body = await req.json();

@@ -5,8 +5,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { getDisplayName, getFirstName, getInitials } from "@/lib/user-display";
 import { NavWalletDropdown } from "@/components/nav-wallet-dropdown";
+import { LoadingScreen } from "@/components/loading-screen";
+import { ChatModal } from "@/components/chat-modal";
 
-type ProfileWallet = { wallet_address?: string | null; sol_balance?: number | null };
+type ProfileData = {
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
+  wallet_address?: string | null;
+  sol_balance?: number | null;
+};
 
 // ── Dimension → axis mapping (mirrors spider_chart.py) ────────────────────────
 const DIMENSION_VARS: Record<string, string[]> = {
@@ -64,36 +72,111 @@ const MATCH_TYPES = [
   { id: "collaborator", label: "Collaborator",       desc: "Creative or technical project" },
 ];
 
-function MatchMakerModal({ onClose }: { onClose: () => void }) {
+function MatchMakerModal({ onClose, currentUserId }: { onClose: () => void; currentUserId: string }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [count, setCount] = useState(0);
   const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<Array<{ auth0_id: string; match_blurb: string }> | null>(null);
+  const [results, setResults] = useState<Array<{ auth0_id: string; first_name?: string; last_name?: string; avatar_url?: string | null; archetype?: string; match_blurb: string }> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [chatMatch, setChatMatch] = useState<{ matchId: string; matchBlurb: string | null } | null>(null);
 
   const toggle = (id: string) =>
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const canSearch = selected.length > 0 && count > 0 && !searching;
 
+  const [searchPhase, setSearchPhase] = useState("");
+
   const handleSearch = async () => {
     if (!canSearch) return;
     setSearching(true);
     setError(null);
     setResults(null);
+    setSearchPhase("Connecting to Snowflake…");
+
+    const MIN_SEARCH_MS = 10000;
+    const startTime = Date.now();
+
+    const phases = [
+      { at: 0, msg: "Connecting to Snowflake…" },
+      { at: 1500, msg: "Loading your archetype vector…" },
+      { at: 3000, msg: "Scanning candidate pool…" },
+      { at: 5000, msg: "Running cosine similarity…" },
+      { at: 7000, msg: "Ranking top matches…" },
+      { at: 8500, msg: "Generating match insights…" },
+    ];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const p of phases) {
+      timers.push(setTimeout(() => setSearchPhase(p.msg), p.at));
+    }
+
     const context = selected.join(",");
-    const params = new URLSearchParams({ server_id: selected[0], top_n: String(count), context });
+    const params = new URLSearchParams({ server_id: "general", top_n: String(count), context });
+
+    let fetchResult: { ok: boolean; data?: { suggestedMatches?: Array<{ auth0_id: string; first_name?: string; last_name?: string; avatar_url?: string | null; archetype?: string; match_blurb: string }> }; error?: string } | null = null;
+
     try {
       const res = await fetch(`/api/matches?${params}`);
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Matching failed"); return; }
-      setResults(data.suggestedMatches ?? []);
+      if (!res.ok) {
+        fetchResult = { ok: false, error: data.error || "Matching failed" };
+      } else {
+        fetchResult = { ok: true, data };
+      }
     } catch {
-      setError("Network error — try again");
+      fetchResult = { ok: false, error: "Network error — try again" };
+    }
+
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(0, MIN_SEARCH_MS - elapsed);
+
+    if (remaining > 0) {
+      setSearchPhase("Finalizing results…");
+      await new Promise(resolve => setTimeout(resolve, remaining));
+    }
+
+    timers.forEach(clearTimeout);
+
+    if (fetchResult?.ok) {
+      setResults(fetchResult.data?.suggestedMatches ?? []);
+    } else {
+      setError(fetchResult?.error ?? "Something went wrong");
+    }
+    setSearching(false);
+  };
+
+  const handleConnect = async (r: { auth0_id: string; match_blurb: string }) => {
+    setConnectingId(r.auth0_id);
+    try {
+      const res = await fetch("/api/matches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchedUserId: r.auth0_id,
+          matchBlurb: r.match_blurb,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create match");
+      setChatMatch({ matchId: data.match.id, matchBlurb: data.match.match_blurb });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to connect");
     } finally {
-      setSearching(false);
+      setConnectingId(null);
     }
   };
+
+  if (chatMatch) {
+    return (
+      <ChatModal
+        matchId={chatMatch.matchId}
+        currentUserId={currentUserId}
+        matchBlurb={chatMatch.matchBlurb}
+        onClose={() => { setChatMatch(null); onClose(); }}
+      />
+    );
+  }
 
   return (
     <div
@@ -138,15 +221,59 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
               <div style={{ textAlign: "center", padding: "2rem", color: "rgba(255,255,255,0.4)", fontSize: "0.85rem" }}>No matches found yet — check back as more people join.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {results.map((r, i) => (
-                  <div key={r.auth0_id} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(124,58,237,0.2)", borderRadius: 14, padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "0.8rem", flexShrink: 0 }}>#{i + 1}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", marginBottom: "0.2rem", fontFamily: "monospace" }}>{r.auth0_id.slice(0, 16)}…</div>
-                      <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>{r.match_blurb}</div>
+                {results.map((r, i) => {
+                  const name = [r.first_name, r.last_name].filter(Boolean).join(" ") || "Anonymous";
+                  const init = r.first_name?.[0]?.toUpperCase() ?? "?";
+                  const isConnecting = connectingId === r.auth0_id;
+                  return (
+                    <div key={r.auth0_id} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(124,58,237,0.2)", borderRadius: 14, padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "0.85rem", flexShrink: 0, overflow: "hidden", border: "2px solid rgba(124,58,237,0.4)" }}>
+                        {r.avatar_url ? <img src={r.avatar_url} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : init}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
+                          <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>{name}</span>
+                          {r.archetype && <span style={{ fontSize: "0.62rem", fontWeight: 700, color: "#a78bfa", background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 100, padding: "0.08rem 0.5rem", letterSpacing: 0.5 }}>{r.archetype}</span>}
+                        </div>
+                        <div style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.55 }}>{r.match_blurb}</div>
+                      </div>
+                      <button
+                        onClick={() => handleConnect(r)}
+                        disabled={isConnecting || connectingId !== null}
+                        style={{
+                          flexShrink: 0,
+                          background: isConnecting ? "rgba(124,58,237,0.15)" : "linear-gradient(135deg,#7c3aed,#9333ea)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: 10,
+                          padding: "0.55rem 1rem",
+                          fontFamily: "var(--font)",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                          cursor: isConnecting || connectingId !== null ? "not-allowed" : "pointer",
+                          opacity: connectingId !== null && !isConnecting ? 0.4 : 1,
+                          transition: "all 0.2s",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.4rem",
+                          boxShadow: isConnecting ? "none" : "0 3px 12px rgba(124,58,237,0.35)",
+                        }}
+                      >
+                        {isConnecting ? (
+                          <>
+                            <div style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", animation: "spin 0.8s linear infinite" }} />
+                            Connecting…
+                          </>
+                        ) : (
+                          <>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                            Connect
+                          </>
+                        )}
+                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {error && <div style={{ marginTop: "1rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 10, padding: "0.7rem 1rem", fontSize: "0.78rem", color: "rgba(239,68,68,0.85)" }}>{error}</div>}
@@ -229,7 +356,7 @@ function MatchMakerModal({ onClose }: { onClose: () => void }) {
               {searching ? (
                 <>
                   <div style={{ width: 16, height: 16, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", animation: "spin 0.8s linear infinite" }} />
-                  Searching…
+                  {searchPhase || "Searching…"}
                 </>
               ) : (
                 <>
@@ -304,7 +431,7 @@ export default function Dashboard() {
   const { user, isLoading } = useUser();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [profile, setProfile] = useState<ProfileWallet | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [activeTab, setActiveTab] = useState<"upload" | "chart">("upload");
   const [showHowTo, setShowHowTo] = useState(false);
   const [showMatchMaker, setShowMatchMaker] = useState(false);
@@ -315,7 +442,7 @@ export default function Dashboard() {
   const [fileError, setFileError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [chartScores, setChartScores] = useState<number[]>([0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
-  const [pendingFile, setPendingFile] = useState<{ name: string; scores: number[] } | null>(null);
+  const [pendingFile, setPendingFile] = useState<{ name: string; scores: number[]; rawScores: Record<string, number> } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
@@ -358,7 +485,7 @@ export default function Dashboard() {
         const json = JSON.parse(e.target?.result as string);
         const raw: Record<string, number> = json.scores ?? {};
         const scores = extractChartScores(raw);
-        setPendingFile({ name: file.name, scores });
+        setPendingFile({ name: file.name, scores, rawScores: raw });
         setUploading(false);
       } catch {
         setFileError("Couldn't parse that file. Make sure it's a valid Gemini export JSON.");
@@ -370,16 +497,41 @@ export default function Dashboard() {
     reader.readAsText(file);
   };
 
-  const handleGenerateChart = () => {
-    if (!pendingFile) return;
+  const handleGenerateChart = async () => {
+    if (!pendingFile || !user?.sub) return;
     const now = new Date();
     localStorage.setItem("dfs_uploaded_at", now.toISOString());
     localStorage.setItem("dfs_chart_scores", JSON.stringify(pendingFile.scores));
     setChartScores(pendingFile.scores);
     setHasData(true);
     setUploadedAt(now);
-    setPendingFile(null);
     setActiveTab("chart");
+
+    const raw = pendingFile.rawScores;
+    setPendingFile(null);
+
+    const BACKEND = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archetype_scores: raw }),
+      });
+    } catch {}
+
+    try {
+      await fetch(`${BACKEND}/v2/archetype`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.sub,
+          server_id: "general",
+          vector: { scores: raw, evidence: {}, confidence: "high", message_count_used: 0 },
+          reputation_score: 0,
+        }),
+      });
+    } catch {}
   };
 
   const handleWrongFile = () => setWrongFileOverride(true);
@@ -388,18 +540,13 @@ export default function Dashboard() {
   const daysUntilReupload = uploadedAt ? Math.max(0, 90 - Math.floor((Date.now() - uploadedAt.getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
   if (!mounted || isLoading) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "2px solid rgba(124,58,237,0.2)", borderTop: "2px solid #7c3aed", animation: "spin 0.8s linear infinite" }} />
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      </div>
-    );
+    return <LoadingScreen />;
   }
   if (!user) return null;
 
-  const displayName = getDisplayName(user);
-  const firstName = getFirstName(user);
-  const initials = getInitials(user);
+  const displayName = profile?.first_name ? getDisplayName(profile) : getDisplayName(user);
+  const firstName = profile?.first_name?.trim() || getFirstName(user);
+  const initials = profile?.first_name ? getInitials(profile) : getInitials(user);
   const joinDate = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const uploadBlocked = hasData && !canReupload && !wrongFileOverride;
 
@@ -523,7 +670,7 @@ export default function Dashboard() {
       `}</style>
 
       {showHowTo && <HowToModal onClose={() => setShowHowTo(false)} />}
-      {showMatchMaker && <MatchMakerModal onClose={() => setShowMatchMaker(false)} />}
+      {showMatchMaker && <MatchMakerModal onClose={() => setShowMatchMaker(false)} currentUserId={user.sub!} />}
 
       <nav className="dash-nav">
         <a href="/" className="dash-logo"><div className="logo-dot" />DFS</a>

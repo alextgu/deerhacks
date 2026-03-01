@@ -72,20 +72,46 @@ export async function upsertProfileFromAuth0User(
     return { error: "Auth0 user has no sub", status: 400 };
   }
 
+  const { data: existing } = await supabaseAdmin
+    .from("profiles")
+    .select("id, first_name, last_name")
+    .eq("id", sub)
+    .single();
+
+  if (existing) {
+    const updates: Record<string, unknown> = {
+      email: user.email ?? "",
+      avatar_url: user.picture ?? null,
+    };
+
+    const hasRealName = existing.first_name && !existing.first_name.includes("@");
+    if (!hasRealName && user.given_name) {
+      updates.first_name = user.given_name;
+      updates.last_name = user.family_name ?? null;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .update(updates)
+      .eq("id", sub)
+      .select()
+      .single();
+
+    if (error) return { error: error.message, status: 500 };
+    return { profile: data };
+  }
+
   const { first_name, last_name } = extractNames(user);
 
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .upsert(
-      {
-        id: sub,
-        email: user.email ?? "",
-        first_name,
-        last_name,
-        avatar_url: user.picture ?? null,
-      },
-      { onConflict: "id" }
-    )
+    .insert({
+      id: sub,
+      email: user.email ?? "",
+      first_name,
+      last_name,
+      avatar_url: user.picture ?? null,
+    })
     .select()
     .single();
 

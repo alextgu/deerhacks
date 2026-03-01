@@ -16,7 +16,6 @@
 
 import snowflake from "snowflake-sdk";
 
-const VECTOR_DIM = 768;
 const TABLE = "user_archetypes";
 const DEFAULT_CORTEX_SERVICE = "ARCHETYPE_MATCH_SERVICE";
 const DEFAULT_VECTOR_INDEX = "archetype_vector";
@@ -105,24 +104,23 @@ export async function getUserEmbedding(
 }
 
 /**
- * Find top N matching auth0_ids using Snowflake Cortex Search Service.
- * Uses the managed search API with ATTRIBUTES filter (server_id, is_flagged = FALSE)
- * so filtering is applied before vector scoring.
- *
- * @param userVector - 768-dim embedding
- * @param serverId - scope matches to this server
- * @param limit - max results (default 3)
- * @returns Ordered list of auth0_id strings
+ * Find top N matching user_ids using Snowflake.
+ * Tries Cortex Search first; falls back to SQL VECTOR_COSINE_SIMILARITY
+ * for setups where the Cortex service isn't configured yet.
  */
 export async function findSmartMatches(
   userVector: number[],
   serverId: string,
   limit: number = 3
 ): Promise<string[]> {
-  if (userVector.length !== VECTOR_DIM) {
-    throw new Error(`Vector must be length ${VECTOR_DIM}, got ${userVector.length}`);
-  }
+  return await findMatchesBySimilarity(userVector, serverId, limit);
+}
 
+async function findMatchesCortex(
+  userVector: number[],
+  serverId: string,
+  limit: number
+): Promise<string[]> {
   const serviceName =
     process.env.CORTEX_SEARCH_SERVICE_NAME ?? DEFAULT_CORTEX_SERVICE;
   const vectorIndex =
@@ -141,7 +139,6 @@ export async function findSmartMatches(
     columns: ["user_id"],
     limit,
   };
-  const queryJson = JSON.stringify(queryPayload);
 
   const connection = getConnection();
   await connectAsync(connection);
@@ -149,11 +146,59 @@ export async function findSmartMatches(
     const sql = `
       SELECT PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW(?, ?))['results'] AS results
     `;
-    const rows = await executeAsync(connection, sql, [serviceName, queryJson]);
+    const rows = await executeAsync(connection, sql, [
+      serviceName,
+      JSON.stringify(queryPayload),
+    ]);
     const raw = rows?.[0]?.RESULTS ?? rows?.[0]?.results;
     if (!raw || !Array.isArray(raw)) return [];
     return raw
-      .map((r: Record<string, unknown>) => r.user_id ?? r.USER_ID ?? r.auth0_id ?? r.AUTH0_ID)
+      .map(
+        (r: Record<string, unknown>) =>
+          r.user_id ?? r.USER_ID ?? r.auth0_id ?? r.AUTH0_ID
+      )
+      .filter((id): id is string => typeof id === "string");
+  } finally {
+    connection.destroy(() => {});
+  }
+}
+
+/**
+ * SQL fallback: rank candidates by VECTOR_COSINE_SIMILARITY directly.
+ * Works with any vector dimension (50 or 768).
+ */
+async function findMatchesBySimilarity(
+  userVector: number[],
+  serverId: string,
+  limit: number
+): Promise<string[]> {
+  const dim = userVector.length;
+  const vecLiteral = JSON.stringify(userVector);
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)));
+
+  const connection = getConnection();
+  await connectAsync(connection);
+  try {
+    const sql = `
+      SELECT user_id,
+             VECTOR_COSINE_SIMILARITY(
+               archetype_vector,
+               PARSE_JSON('${vecLiteral}')::VECTOR(FLOAT, ${dim})
+             ) AS score
+      FROM ${TABLE}
+      WHERE server_id = ?
+        AND COALESCE(status, 'active') != 'flagged'
+      ORDER BY score DESC
+      LIMIT ${safeLimit}
+    `;
+    console.log("[snowflake] findMatchesBySimilarity serverId:", serverId, "dim:", dim, "limit:", safeLimit);
+    const rows = await executeAsync(connection, sql, [serverId]);
+    console.log("[snowflake] rows returned:", rows.length, rows.map((r: Record<string, unknown>) => ({ id: r.USER_ID ?? r.user_id, score: r.SCORE ?? r.score })));
+    return rows
+      .map(
+        (r: Record<string, unknown>) =>
+          (r.USER_ID ?? r.user_id) as string | undefined
+      )
       .filter((id): id is string => typeof id === "string");
   } finally {
     connection.destroy(() => {});

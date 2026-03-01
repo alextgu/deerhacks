@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ChatPanel } from "./chat-panel";
 
 type ChatModalProps = {
@@ -16,9 +16,22 @@ export function ChatModal({
   matchBlurb,
   onClose,
 }: ChatModalProps) {
+  const [closing, setClosing] = useState(false);
+
+  const handleClose = useCallback(async () => {
+    if (closing) return;
+    setClosing(true);
+    try {
+      await fetch(`/api/chat/${matchId}`, { method: "PATCH" });
+    } catch {
+      // ignore
+    }
+    onClose();
+  }, [matchId, onClose, closing]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     }
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -26,14 +39,14 @@ export function ChatModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [onClose]);
+  }, [handleClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* backdrop */}
       <div
         className="absolute inset-0 bg-black-50 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* modal */}
@@ -52,8 +65,9 @@ export function ChatModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="ml-3 flex shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            onClick={handleClose}
+            disabled={closing}
+            className="ml-3 flex shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
             style={{ width: "2rem", height: "2rem" }}
           >
             <svg
@@ -72,7 +86,7 @@ export function ChatModal({
 
         {/* chat body */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          <ChatPanel matchId={matchId} currentUserId={currentUserId} matchBlurb={matchBlurb} />
+          <ChatPanel matchId={matchId} currentUserId={currentUserId} matchBlurb={matchBlurb} onMatchEnded={onClose} />
         </div>
       </div>
     </div>
