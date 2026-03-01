@@ -3,6 +3,7 @@
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getDisplayName, getFirstName, getInitials } from "@/lib/user-display";
 
 export default function Dashboard() {
   const { user, isLoading } = useUser();
@@ -38,9 +39,9 @@ export default function Dashboard() {
 
   if (!user) return null;
 
-  const initials = user.name
-    ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
-    : user.email?.[0].toUpperCase() ?? "?";
+  const displayName = getDisplayName(user);
+  const firstName = getFirstName(user);
+  const initials = getInitials(user);
 
   return (
     <>
@@ -284,7 +285,7 @@ export default function Dashboard() {
           <div className="dash-nav-right">
             <span className="dash-nav-name">{user.email}</span>
             <div className="dash-avatar">
-              {user.picture ? <img src={user.picture} alt={user.name || "User"} /> : initials}
+              {user.picture ? <img src={user.picture} alt={displayName} /> : initials}
             </div>
             <a href="/auth/logout" className="logout-btn">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -302,7 +303,7 @@ export default function Dashboard() {
             <div>
               <div className="welcome-pre">Your Dashboard</div>
               <h1 className="welcome-h1">
-                Welcome back, <em>{user.name?.split(" ")[0] || "there"}</em>
+                Welcome back, <em>{firstName}</em>
               </h1>
               <div className="welcome-email">{user.email}</div>
             </div>
@@ -373,10 +374,10 @@ export default function Dashboard() {
             <div className="dash-sidebar">
               <div className="profile-card">
                 <div className="profile-avatar-lg">
-                  {user.picture ? <img src={user.picture} alt={user.name || "User"} /> : initials}
+                  {user.picture ? <img src={user.picture} alt={displayName} /> : initials}
                   <div className="online-dot" />
                 </div>
-                <div className="profile-name">{user.name || "Anonymous"}</div>
+                <div className="profile-name">{displayName}</div>
                 <div className="profile-email">{user.email}</div>
                 <div className="profile-divider" />
                 <div className="profile-stat-row">

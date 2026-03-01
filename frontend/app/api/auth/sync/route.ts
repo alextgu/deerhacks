@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import type { Auth0UserWithName } from "@/lib/user-display";
 
 export async function POST() {
   try {
@@ -9,7 +10,10 @@ export async function POST() {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const { sub, email, name, picture } = session.user;
+    const u = session.user as Auth0UserWithName & { sub?: string };
+    const { sub, email, name, picture } = u;
+    const givenName = u.given_name ?? null;
+    const familyName = u.family_name ?? null;
 
     const { data, error } = await supabaseAdmin
       .from("profiles")
@@ -18,6 +22,8 @@ export async function POST() {
           id: sub,
           email: email ?? "",
           name: name ?? null,
+          first_name: givenName,
+          last_name: familyName,
           avatar_url: picture ?? null,
         },
         { onConflict: "id" }

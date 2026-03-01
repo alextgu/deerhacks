@@ -1,6 +1,7 @@
 'use client';
 
 import { useUser } from '@auth0/nextjs-auth0/client';
+import { getDisplayName } from '@/lib/user-display';
 
 export function AuthButton() {
   const { user, isLoading } = useUser();
@@ -14,6 +15,7 @@ export function AuthButton() {
   }
 
   if (user) {
+    const name = getDisplayName(user);
     return (
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
@@ -22,7 +24,7 @@ export function AuthButton() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={user.picture}
-                alt={user.name ?? 'User'}
+                alt={name}
                 width={32}
                 height={32}
                 className="rounded-full"
@@ -30,7 +32,7 @@ export function AuthButton() {
             </>
           )}
           <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            {user.name}
+            {name}
           </span>
         </div>
         <a

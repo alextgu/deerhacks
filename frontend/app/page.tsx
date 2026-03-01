@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "@auth0/nextjs-auth0/client";
+import { getDisplayName } from "@/lib/user-display";
 
 // ── Intersection observer hook ─────────────────────────────────────────────────
 function useInView(threshold = 0.15) {
@@ -696,7 +697,7 @@ export default function Home() {
                 if (d) d.style.display = d.style.display === 'flex' ? 'none' : 'flex';
               }}>
                 {user.picture ? (
-                  <img src={user.picture} alt={user.name || 'User'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                  <img src={user.picture} alt={getDisplayName(user)} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
                 ) : (
                   <div className="user-avatar-fallback">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -709,7 +710,7 @@ export default function Home() {
               </button>
               <div id="user-dropdown" className="user-dropdown" style={{ display: 'none' }}>
                 <div className="user-dropdown-info">
-                  <div className="user-dropdown-name">{user.name}</div>
+                  <div className="user-dropdown-name">{getDisplayName(user)}</div>
                   <div className="user-dropdown-email">{user.email}</div>
                 </div>
                 <div className="user-dropdown-divider" />
