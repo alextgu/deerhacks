@@ -14,6 +14,7 @@ type ProfileData = {
   avatar_url?: string | null;
   wallet_address?: string | null;
   sol_balance?: number | null;
+  karma_score?: number | null;
 };
 
 // ── Dimension → axis mapping (mirrors spider_chart.py) ────────────────────────
@@ -576,6 +577,7 @@ export default function Dashboard() {
         @keyframes findPulse{0%,100%{box-shadow:0 4px 24px rgba(124,58,237,0.45)}50%{box-shadow:0 4px 36px rgba(124,58,237,0.75),0 0 0 6px rgba(124,58,237,0.1)}}
         .dash-nav{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 2.5rem;border-bottom:1px solid var(--border);background:rgba(10,10,15,0.85);backdrop-filter:blur(20px);position:sticky;top:0;z-index:100;}
         .dash-logo{font-weight:900;font-size:1.2rem;letter-spacing:-0.5px;display:flex;align-items:center;gap:0.5rem;text-decoration:none;color:var(--text);}
+        .dash-logo-img{height:32px;width:auto;object-fit:contain;display:block;}
         .logo-dot{width:10px;height:10px;border-radius:50%;background:var(--v2);position:relative;}
         .logo-dot::before{content:'';position:absolute;inset:0;border-radius:50%;background:var(--v);animation:pulse-ring 1.5s ease-out infinite;}
         .nav-right{display:flex;align-items:center;gap:0.85rem;}
@@ -606,6 +608,10 @@ export default function Dashboard() {
         .profile-info-row svg{flex-shrink:0;opacity:0.5;}
         .profile-info-val{color:rgba(255,255,255,0.8);font-weight:600;}
         .profile-divider{height:1px;background:var(--border);margin:1.25rem 0;}
+        .profile-coins{display:flex;align-items:center;gap:0.75rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:0.75rem 1rem;}
+        .profile-coin-icon{width:40px;height:40px;object-fit:contain;flex-shrink:0;}
+        .profile-coin-val{font-family:var(--serif);font-size:1.5rem;font-weight:700;color:var(--v2);line-height:1;}
+        .profile-coin-lbl{font-size:0.6rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:0.2rem;}
         .profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;}
         .profile-stat{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:0.75rem 0.5rem;text-align:center;}
         .profile-stat-val{font-family:var(--serif);font-size:1.25rem;font-weight:700;color:var(--v2);line-height:1;}
@@ -673,7 +679,9 @@ export default function Dashboard() {
       {showMatchMaker && <MatchMakerModal onClose={() => setShowMatchMaker(false)} currentUserId={user.sub!} />}
 
       <nav className="dash-nav">
-        <a href="/" className="dash-logo"><div className="logo-dot" />DFS</a>
+        <a href="/" className="dash-logo">
+          <img src="/DFSlogo.png" alt="DFS" className="dash-logo-img" />
+        </a>
         <div className="nav-right">
           <NavWalletDropdown buttonClassName="wallet-nav-btn" />
           <a href="/auth/logout" className="logout-btn">
@@ -717,6 +725,14 @@ export default function Dashboard() {
                 <div className="profile-info-row">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                   <span>Network</span><span className="profile-info-val">Solana Devnet</span>
+                </div>
+              </div>
+              <div className="profile-divider" />
+              <div className="profile-coins">
+                <img src="/DFScoin.png" alt="" className="profile-coin-icon" />
+                <div>
+                  <div className="profile-coin-val">{profile?.karma_score != null ? Number(profile.karma_score) : 0}</div>
+                  <div className="profile-coin-lbl">DFS Coins</div>
                 </div>
               </div>
               <div className="profile-divider" />
