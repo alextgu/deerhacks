@@ -691,39 +691,50 @@ export default function Home() {
         </div>
         <div className="nav-r">
           {user ? (
-            <div className="user-menu-wrap">
-              <button className="user-avatar-btn" onClick={() => {
-                const d = document.getElementById('user-dropdown');
-                if (d) d.style.display = d.style.display === 'flex' ? 'none' : 'flex';
-              }}>
-                {user.picture ? (
-                  <img src={user.picture} alt={getDisplayName(user)} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <div className="user-avatar-fallback">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                      <circle cx="12" cy="7" r="4"/>
-                    </svg>
+            <>
+              <a href="/dashboard#wallet" style={{textDecoration:"none"}}>
+                <button className="nb" style={{display:"flex",alignItems:"center",gap:"0.4rem",borderColor:"rgba(124,58,237,0.35)",color:"var(--v2)"}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="5" width="20" height="14" rx="2"/>
+                    <path d="M16 12h.01"/>
+                  </svg>
+                  Wallet
+                </button>
+              </a>
+              <div className="user-menu-wrap">
+                <button className="user-avatar-btn" onClick={() => {
+                  const d = document.getElementById('user-dropdown');
+                  if (d) d.style.display = d.style.display === 'flex' ? 'none' : 'flex';
+                }}>
+                  {user.picture ? (
+                    <img src={user.picture} alt={getDisplayName(user)} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <div className="user-avatar-fallback">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                    </div>
+                  )}
+                  <div className="user-status-dot" />
+                </button>
+                <div id="user-dropdown" className="user-dropdown" style={{ display: 'none' }}>
+                  <div className="user-dropdown-info">
+                    <div className="user-dropdown-name">{getDisplayName(user)}</div>
+                    <div className="user-dropdown-email">{user.email}</div>
                   </div>
-                )}
-                <div className="user-status-dot" />
-              </button>
-              <div id="user-dropdown" className="user-dropdown" style={{ display: 'none' }}>
-                <div className="user-dropdown-info">
-                  <div className="user-dropdown-name">{getDisplayName(user)}</div>
-                  <div className="user-dropdown-email">{user.email}</div>
+                  <div className="user-dropdown-divider" />
+                  <a href="/dashboard" className="user-dropdown-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    Dashboard
+                  </a>
+                  <a href="/auth/logout" className="user-dropdown-item user-dropdown-logout">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    Log out
+                  </a>
                 </div>
-                <div className="user-dropdown-divider" />
-                <a href="/dashboard" className="user-dropdown-item">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                  Dashboard
-                </a>
-                <a href="/auth/logout" className="user-dropdown-item user-dropdown-logout">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                  Log out
-                </a>
               </div>
-            </div>
+            </>
           ) : (
             <>
               <a href="/auth/login" style={{ textDecoration: 'none' }}>
@@ -736,7 +747,6 @@ export default function Home() {
           )}
         </div>
       </nav>
-
       {/* HERO */}
       <section ref={heroRef} className="hero">
         <div className="hero-grid" />
