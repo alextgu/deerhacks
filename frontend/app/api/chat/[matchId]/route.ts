@@ -125,9 +125,17 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     }
 
     const u = updated as { status: string; closed_by_user_a: boolean; closed_by_user_b: boolean };
+    const matchEnded = u.status === "closed";
+
+    // When both users have ended the chat, delete messages and the match row
+    if (matchEnded) {
+      await supabaseAdmin.from("messages").delete().eq("match_id", matchId);
+      await supabaseAdmin.from("matches").delete().eq("id", matchId);
+    }
+
     return NextResponse.json({
       closed: true,
-      match_ended: u.status === "closed",
+      match_ended: matchEnded,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed";

@@ -35,6 +35,7 @@ export function ChatPanel({ matchId, currentUserId, matchBlurb, onMatchEnded }: 
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<MatchMeta | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [endingChat, setEndingChat] = useState(false);
   const listEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -166,6 +167,26 @@ export function ChatPanel({ matchId, currentUserId, matchBlurb, onMatchEnded }: 
     }
   }
 
+  async function handleEndChat() {
+    if (endingChat || meta?.closed_by_me) return;
+    setEndingChat(true);
+    try {
+      const res = await fetch(`/api/chat/${matchId}`, { method: "PATCH" });
+      const data = await res.json();
+      if (data.match_ended) {
+        onMatchEnded?.();
+        return;
+      }
+      setMeta((prev) =>
+        prev ? { ...prev, closed_by_me: true, is_ended: false } : null
+      );
+    } catch {
+      setError("Failed to end chat");
+    } finally {
+      setEndingChat(false);
+    }
+  }
+
   const isEnded = meta?.is_ended ?? false;
   const expired = meta?.is_expired ?? false;
 
@@ -253,27 +274,43 @@ export function ChatPanel({ matchId, currentUserId, matchBlurb, onMatchEnded }: 
 
       {/* Input — hidden when chat ended */}
       {!isEnded && (
-        <div className="flex gap-2 border-t border-border p-3">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder="Type a message…"
-            className="flex-1-input rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
-            style={sending ? { opacity: 0.5 } : undefined}
-            disabled={sending}
-          />
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={sending || !input.trim()}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-90"
-            style={sending || !input.trim() ? { opacity: 0.5 } : undefined}
-          >
-            {sending ? "Sending…" : "Send"}
-          </button>
-        </div>
+        <>
+          <div className="flex gap-2 border-t border-border p-3">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+              placeholder="Type a message…"
+              className="flex-1-input rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
+              style={sending ? { opacity: 0.5 } : undefined}
+              disabled={sending}
+            />
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sending || !input.trim()}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-90"
+              style={sending || !input.trim() ? { opacity: 0.5 } : undefined}
+            >
+              {sending ? "Sending…" : "Send"}
+            </button>
+          </div>
+          <div className="border-t border-border px-3 pb-3 pt-1">
+            <button
+              type="button"
+              onClick={handleEndChat}
+              disabled={endingChat || meta?.closed_by_me}
+              className="text-xs font-medium text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+            >
+              {meta?.closed_by_me
+                ? "You ended this chat — waiting for the other person"
+                : endingChat
+                  ? "Ending…"
+                  : "End chat"}
+            </button>
+          </div>
+        </>
       )}
       {error && messages.length > 0 && (
         <p className="px-3 pb-2 text-xs text-destructive">{error}</p>
