@@ -324,18 +324,22 @@ export default function Home() {
 
         nav{position:fixed;top:0;left:0;right:0;z-index:200;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:1rem 2.5rem;transition:all 0.4s;}
         nav.scrolled{background:rgba(10,10,15,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
-        .logo{font-weight:900;font-size:1.3rem;letter-spacing:-0.5px;display:flex;align-items:center;gap:0.5rem;justify-self:start;}
+        .logo{display:flex;align-items:center;justify-self:start;}
+        .logo-img{height:64px;width:auto;object-fit:contain;display:block;}
         .logo-ring{position:relative;width:10px;height:10px;flex-shrink:0;}
         .logo-ring::before{content:'';position:absolute;inset:0;border-radius:50%;background:var(--v);animation:pulse-ring 1.5s ease-out infinite;}
         .logo-ring::after{content:'';position:absolute;inset:1px;border-radius:50%;background:var(--v2);}
         .nav-c{display:flex;gap:2rem;font-size:0.85rem;font-weight:500;justify-self:center;}
         .nav-c a{text-decoration:none;color:var(--muted);transition:color 0.2s;}
         .nav-c a:hover{color:var(--text);}
-        .nav-r{display:flex;gap:0.6rem;justify-self:end;}
-        .nb{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:0.45rem 1rem;font-family:var(--font);font-size:0.82rem;font-weight:600;cursor:pointer;transition:all 0.2s;}
+        .nav-r{display:flex;align-items:center;gap:0.6rem;justify-self:end;}
+        .nav-r .nb,.nav-r .nb-fill,.nav-r .home-logout{width:118px;height:38px;min-height:38px;line-height:1;padding:0 0.85rem;border-radius:8px;font-family:var(--font);font-size:0.82rem;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;justify-content:center;gap:0.35rem;box-sizing:border-box;flex-shrink:0;text-decoration:none;}
+        .nb{background:none;border:1px solid var(--border);color:var(--muted);}
         .nb:hover{border-color:var(--v2);color:var(--v2);}
-        .nb-fill{background:linear-gradient(135deg,var(--v),var(--v2));color:white;border:none;border-radius:8px;padding:0.45rem 1.1rem;font-family:var(--font);font-size:0.82rem;font-weight:700;cursor:pointer;transition:all 0.2s;}
+        .nb-fill{background:linear-gradient(135deg,var(--v),var(--v2));color:white;border:none;}
         .nb-fill:hover{opacity:0.85;transform:translateY(-1px);}
+        .home-logout{background:none;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.75);}
+        .home-logout:hover{border-color:rgba(239,68,68,0.7);color:rgba(239,68,68,1);background:rgba(239,68,68,0.06);}
 
         .user-menu-wrap{position:relative;}
         .user-avatar-btn{position:relative;background:none;border:2px solid rgba(124,58,237,0.5);border-radius:50%;padding:0;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;transition:border-color 0.2s,box-shadow 0.2s;overflow:visible;}
@@ -494,7 +498,7 @@ export default function Home() {
 
       {/* NAV */}
       <nav className={scrolled ? "scrolled" : ""}>
-        <div className="logo"><div className="logo-ring" />DFS</div>
+        <a href="/" className="logo"><img src="/DFSlogo.png" alt="DFS" className="logo-img" /></a>
         <div className="nav-c">
           <a href="#how">How it works</a>
           <a href="#features">Features</a>
@@ -503,11 +507,8 @@ export default function Home() {
         <div className="nav-r">
           {user ? (
             <>
-              <NavWalletDropdown />
-              <a href="/auth/logout" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'none', border: '1px solid rgba(239,68,68,0.35)', color: 'rgba(239,68,68,0.75)', borderRadius: '8px', padding: '0.45rem 0.85rem', fontFamily: 'var(--font)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-                onMouseEnter={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.borderColor = 'rgba(239,68,68,0.7)'; el.style.color = 'rgba(239,68,68,1)'; el.style.background = 'rgba(239,68,68,0.06)'; }}
-                onMouseLeave={e => { const el = e.currentTarget as HTMLAnchorElement; el.style.borderColor = 'rgba(239,68,68,0.35)'; el.style.color = 'rgba(239,68,68,0.75)'; el.style.background = 'none'; }}
-              >
+              <NavWalletDropdown buttonClassName="nb" />
+              <a href="/auth/logout" className="home-logout">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                   <polyline points="16 17 21 12 16 7"/>
@@ -550,8 +551,8 @@ export default function Home() {
             </>
           ) : (
             <>
-              <a href="/auth/login" style={{ textDecoration:'none' }}><button className="nb">Log in</button></a>
-              <a href="/auth/login?screen_hint=signup" style={{ textDecoration:'none' }}><button className="nb-fill">Sign up free</button></a>
+              <a href="/auth/login" style={{ textDecoration:'none' }}><button type="button" className="nb">Log in</button></a>
+              <a href="/auth/login?screen_hint=signup" style={{ textDecoration:'none' }}><button type="button" className="nb-fill">Sign up free</button></a>
             </>
           )}
         </div>
@@ -660,7 +661,7 @@ export default function Home() {
       <footer>
         <div className="footer-top">
           <div>
-            <div className="footer-logo"><div className="logo-ring" />DFS</div>
+            <div className="footer-logo"><img src="/DFSlogo.png" alt="DFS" style={{ height: 28, width: 'auto', display: 'block' }} /></div>
             <div className="footer-tagline">Depth First Social — connect with people who think like you, powered by your AI conversation history.</div>
           </div>
           <div>

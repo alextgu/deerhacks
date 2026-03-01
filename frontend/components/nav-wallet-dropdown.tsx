@@ -108,12 +108,7 @@ export function NavWalletDropdown({ buttonClassName }: NavWalletDropdownProps = 
       <button
         type="button"
         className={buttonClassName ?? 'nb'}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.4rem',
-          ...(buttonClassName ? {} : { borderColor: 'rgba(124,58,237,0.35)', color: 'var(--v2)' }),
-        }}
+        style={buttonClassName ? undefined : { display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(124,58,237,0.35)', color: 'var(--v2)' }}
         onClick={() => setOpen((o) => !o)}
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

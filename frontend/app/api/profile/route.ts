@@ -36,6 +36,7 @@ const ALLOWED_FIELDS = new Set([
   "summary",
   "interests",
   "collaboration_style",
+  "upload_history",
 ]);
 
 /** PATCH — update profile fields (archetype_scores, summary, etc.) */

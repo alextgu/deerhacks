@@ -8,6 +8,8 @@ import { NavWalletDropdown } from "@/components/nav-wallet-dropdown";
 import { LoadingScreen } from "@/components/loading-screen";
 import { ChatModal } from "@/components/chat-modal";
 
+type UploadToken = { at: string };
+
 type ProfileData = {
   first_name?: string | null;
   last_name?: string | null;
@@ -15,6 +17,7 @@ type ProfileData = {
   wallet_address?: string | null;
   sol_balance?: number | null;
   karma_score?: number | null;
+  upload_history?: UploadToken[] | null;
 };
 
 // ── Dimension → axis mapping (mirrors spider_chart.py) ────────────────────────
@@ -466,8 +469,8 @@ export default function Dashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (window.location.hash === "#wallet") {
-      setTimeout(() => document.getElementById("wallet")?.scrollIntoView({ behavior: "smooth" }), 300);
+    if (window.location.hash === "#tokens") {
+      setTimeout(() => document.getElementById("tokens")?.scrollIntoView({ behavior: "smooth" }), 300);
     }
   }, []);
 
@@ -514,11 +517,18 @@ export default function Dashboard() {
     const BACKEND = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
     try {
+      const history = (profile?.upload_history ?? []) as UploadToken[];
+      const prev = history.length > 0 ? history : (uploadedAt ? [{ at: uploadedAt.toISOString() }] : []);
+      const nextHistory = [...prev, { at: now.toISOString() }];
       await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archetype_scores: raw }),
+        body: JSON.stringify({
+          archetype_scores: raw,
+          upload_history: nextHistory,
+        }),
       });
+      setProfile((p) => p ? { ...p, upload_history: nextHistory } : p);
     } catch {}
 
     try {
@@ -577,16 +587,18 @@ export default function Dashboard() {
         @keyframes findPulse{0%,100%{box-shadow:0 4px 24px rgba(124,58,237,0.45)}50%{box-shadow:0 4px 36px rgba(124,58,237,0.75),0 0 0 6px rgba(124,58,237,0.1)}}
         .dash-nav{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 2.5rem;border-bottom:1px solid var(--border);background:rgba(10,10,15,0.85);backdrop-filter:blur(20px);position:sticky;top:0;z-index:100;}
         .dash-logo{font-weight:900;font-size:1.2rem;letter-spacing:-0.5px;display:flex;align-items:center;gap:0.5rem;text-decoration:none;color:var(--text);}
-        .dash-logo-img{height:32px;width:auto;object-fit:contain;display:block;}
+        .dash-logo-img{height:56px;width:auto;object-fit:contain;display:block;}
         .logo-dot{width:10px;height:10px;border-radius:50%;background:var(--v2);position:relative;}
         .logo-dot::before{content:'';position:absolute;inset:0;border-radius:50%;background:var(--v);animation:pulse-ring 1.5s ease-out infinite;}
         .nav-right{display:flex;align-items:center;gap:0.85rem;}
         .nav-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--v),var(--v2));display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;color:white;border:2px solid rgba(124,58,237,0.4);overflow:hidden;flex-shrink:0;}
         .nav-avatar img{width:100%;height:100%;object-fit:cover;}
-        .wallet-nav-btn{background:none;border:1px solid rgba(124,58,237,0.35);color:var(--v2);border-radius:8px;padding:0.38rem 0.85rem;font-family:var(--font);font-size:0.78rem;font-weight:600;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:0.4rem;}
-        .wallet-nav-btn:hover{border-color:var(--v2);background:rgba(124,58,237,0.08);}
-        .logout-btn{background:none;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.75);border-radius:8px;padding:0.38rem 0.85rem;font-family:var(--font);font-size:0.78rem;font-weight:600;cursor:pointer;transition:all 0.2s;text-decoration:none;display:flex;align-items:center;gap:0.35rem;}
-        .logout-btn:hover{border-color:rgba(239,68,68,0.7);color:rgba(239,68,68,1);background:rgba(239,68,68,0.06);}
+        .nav-right .wallet-nav-btn,
+        .nav-right .logout-btn{width:112px;height:34px!important;min-height:34px!important;line-height:1;padding:0 0.5rem;border-radius:8px;font-family:var(--font);font-size:0.78rem;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex!important;align-items:center;justify-content:center;gap:0.35rem;box-sizing:border-box;flex-shrink:0;}
+        .nav-right .wallet-nav-btn{background:none;border:1px solid rgba(124,58,237,0.35);color:var(--v2);}
+        .nav-right .wallet-nav-btn:hover{border-color:var(--v2);background:rgba(124,58,237,0.08);}
+        .nav-right .logout-btn{background:none;border:1px solid rgba(239,68,68,0.35);color:rgba(239,68,68,0.75);text-decoration:none;}
+        .nav-right .logout-btn:hover{border-color:rgba(239,68,68,0.7);color:rgba(239,68,68,1);background:rgba(239,68,68,0.06);}
         .dash-main{padding:2.5rem;max-width:1100px;margin:0 auto;width:100%;}
         .page-header{margin-bottom:2rem;animation:fadeUp 0.5s ease forwards;}
         .page-eyebrow{font-size:0.65rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--v2);margin-bottom:0.4rem;}
@@ -594,8 +606,9 @@ export default function Dashboard() {
         .page-title em{font-style:italic;color:transparent;background:linear-gradient(135deg,var(--v2),#f97316);background-size:200% 200%;animation:gradient-shift 4s ease infinite;-webkit-background-clip:text;background-clip:text;}
         .dash-grid{display:grid;grid-template-columns:300px 1fr;gap:1.25rem;align-items:stretch;}
         .profile-card{background:var(--dark2);border:1px solid var(--border);border-radius:22px;overflow:hidden;animation:fadeUp 0.5s ease 0.05s forwards;opacity:0;position:relative;display:flex;flex-direction:column;}
-        .profile-banner{height:80px;background:linear-gradient(135deg,#1a0a3d 0%,#0f0a1f 50%,#130a2e 100%);position:relative;}
+        .profile-banner{height:80px;background:linear-gradient(135deg,#1a0a3d 0%,#0f0a1f 50%,#130a2e 100%);position:relative;display:flex;align-items:center;justify-content:center;}
         .profile-banner-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 100%,rgba(124,58,237,0.35) 0%,transparent 70%);}
+        .profile-banner-logo{height:56px;width:auto;object-fit:contain;display:block;position:relative;z-index:1;}
         .profile-body{padding:0 1.5rem 1.75rem;display:flex;flex-direction:column;flex:1;}
         .profile-avatar-wrap{position:relative;margin-top:-32px;margin-bottom:1rem;}
         .profile-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--v),var(--v2));display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:800;color:white;border:3px solid var(--dark2);box-shadow:0 0 24px rgba(124,58,237,0.3);overflow:hidden;position:relative;}
@@ -608,10 +621,11 @@ export default function Dashboard() {
         .profile-info-row svg{flex-shrink:0;opacity:0.5;}
         .profile-info-val{color:rgba(255,255,255,0.8);font-weight:600;}
         .profile-divider{height:1px;background:var(--border);margin:1.25rem 0;}
-        .profile-coins{display:flex;align-items:center;gap:0.75rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:0.75rem 1rem;}
-        .profile-coin-icon{width:40px;height:40px;object-fit:contain;flex-shrink:0;}
-        .profile-coin-val{font-family:var(--serif);font-size:1.5rem;font-weight:700;color:var(--v2);line-height:1;}
-        .profile-coin-lbl{font-size:0.6rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:0.2rem;}
+        .profile-coins-link{display:flex;align-items:center;gap:0.6rem;width:100%;padding:0.65rem 1rem;background:rgba(255,255,255,0.03);border:1px solid rgba(124,58,237,0.2);border-radius:12px;cursor:pointer;transition:border-color 0.2s,background 0.2s;font:inherit;color:inherit;text-align:left;}
+        .profile-coins-link:hover{border-color:rgba(124,58,237,0.4);background:rgba(124,58,237,0.06);}
+        .profile-coins-link-icon{width:36px;height:36px;object-fit:contain;flex-shrink:0;}
+        .profile-coins-link-text{flex:1;font-size:0.82rem;font-weight:600;color:rgba(255,255,255,0.9);}
+        .profile-coins-link-count{font-size:0.75rem;font-weight:700;color:var(--v2);background:rgba(124,58,237,0.15);border-radius:100px;padding:0.2rem 0.5rem;min-width:1.5rem;text-align:center;}
         .profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;}
         .profile-stat{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:0.75rem 0.5rem;text-align:center;}
         .profile-stat-val{font-family:var(--serif);font-size:1.25rem;font-weight:700;color:var(--v2);line-height:1;}
@@ -667,6 +681,15 @@ export default function Dashboard() {
         .wallet-empty{display:flex;flex-direction:column;align-items:center;gap:0.65rem;padding:1.5rem;text-align:center;color:var(--muted);}
         .wallet-empty-icon{width:44px;height:44px;border-radius:12px;background:rgba(124,58,237,0.07);border:1px solid rgba(124,58,237,0.14);display:flex;align-items:center;justify-content:center;}
         .section-divider{height:1px;background:var(--border);margin:2rem 0;}
+        .token-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem;}
+        .token-gallery-empty{display:flex;flex-direction:column;align-items:center;gap:0.75rem;padding:3rem 2rem;background:rgba(255,255,255,0.02);border:1px dashed rgba(124,58,237,0.25);border-radius:20px;text-align:center;}
+        .token-gallery-empty-icon{width:64px;height:64px;object-fit:contain;opacity:0.4;}
+        .token-card{position:relative;background:linear-gradient(145deg,rgba(26,10,61,0.6),rgba(15,10,31,0.8));border:1px solid rgba(124,58,237,0.2);border-radius:20px;padding:1.5rem;display:flex;flex-direction:column;align-items:center;gap:0.5rem;overflow:hidden;transition:border-color 0.2s,transform 0.2s;cursor:pointer;width:100%;text-align:center;font:inherit;color:inherit;}
+        .token-card:hover{border-color:rgba(124,58,237,0.45);transform:translateY(-2px);}
+        .token-card-glow{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--v),var(--v2));border-radius:20px 20px 0 0;}
+        .token-card-coin{width:56px;height:56px;object-fit:contain;}
+        .token-card-date{font-size:0.8rem;font-weight:700;color:rgba(255,255,255,0.9);}
+        .token-card-label{font-size:0.65rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);}
         @media(max-width:900px){
           .dash-grid{grid-template-columns:1fr;}
           .dash-main{padding:1.5rem;}
@@ -703,7 +726,10 @@ export default function Dashboard() {
         <div className="dash-grid">
           {/* ── LEFT: PROFILE CARD ── */}
           <div className="profile-card">
-            <div className="profile-banner"><div className="profile-banner-glow" /></div>
+            <div className="profile-banner">
+              <div className="profile-banner-glow" />
+              <img src="/DFSlogo.png" alt="DFS" className="profile-banner-logo" />
+            </div>
             <div className="profile-body">
               <div className="profile-avatar-wrap">
                 <div className="profile-avatar">
@@ -728,13 +754,17 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="profile-divider" />
-              <div className="profile-coins">
-                <img src="/DFScoin.png" alt="" className="profile-coin-icon" />
-                <div>
-                  <div className="profile-coin-val">{profile?.karma_score != null ? Number(profile.karma_score) : 0}</div>
-                  <div className="profile-coin-lbl">DFS Coins</div>
-                </div>
-              </div>
+              <button
+                type="button"
+                className="profile-coins-link"
+                onClick={() => document.getElementById("tokens")?.scrollIntoView({ behavior: "smooth" })}
+              >
+                <img src="/DFScoin.png" alt="" className="profile-coins-link-icon" />
+                <span className="profile-coins-link-text">Your tokens</span>
+                <span className="profile-coins-link-count">
+                  {((profile?.upload_history ?? []) as UploadToken[]).length || (uploadedAt ? 1 : 0)}
+                </span>
+              </button>
               <div className="profile-divider" />
               <div className="profile-stats">
                 {[{val:"—",lbl:"Matches"},{val:"—",lbl:"Score"},{val:"0",lbl:"Chats"}].map(s => (
@@ -852,7 +882,7 @@ export default function Dashboard() {
             )}
 
             {activeTab === "chart" && (
-              <div className="chart-card">
+              <div id="chart-card" className="chart-card">
                 <div className="card-eyebrow">Interest Profile</div>
                 <div className="card-title" style={{ marginBottom: "1.25rem" }}>Your Spider Chart</div>
                 {hasData ? (
@@ -888,45 +918,47 @@ export default function Dashboard() {
         </div>
 
         <div className="section-divider" />
-        <div id="wallet" className="wallet-section">
-          <div className="section-eyebrow">Solana · Devnet</div>
-          <h2 className="section-title">Your <em>Wallet</em></h2>
-          <div className="wallet-grid">
-            <div className="wallet-card" style={{ background: "linear-gradient(135deg,#1a0a3d,#0f0a1f)" }}>
-              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,var(--v),var(--v2))", borderRadius: "20px 20px 0 0" }} />
-              <div className="wallet-lbl">Total Balance</div>
-              <div className="wallet-val">{profile?.sol_balance != null ? Number(profile.sol_balance).toFixed(4) : "0"} <span style={{ fontSize: "1.1rem", color: "var(--muted)" }}>SOL</span></div>
-              <div className="wallet-sub">≈ $0.00 USD · Devnet</div>
-              {profile?.wallet_address ? (
-                <div style={{ marginTop: "0.75rem", fontFamily: "monospace", fontSize: "0.72rem", color: "var(--muted)", background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", borderRadius: 8, padding: "0.45rem 0.75rem" }}>
-                  {profile.wallet_address.slice(0,4)}...{profile.wallet_address.slice(-4)}
-                </div>
-              ) : (
-                <p style={{ marginTop: "0.75rem", fontSize: "0.78rem", color: "var(--muted)", lineHeight: 1.6 }}>Use the <strong style={{ color: "var(--v2)" }}>Wallet</strong> button in the nav to connect.</p>
-              )}
-            </div>
-            <div className="wallet-card">
-              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#f97316,transparent)", borderRadius: "20px 20px 0 0" }} />
-              <div className="wallet-lbl">Reputation Score</div>
-              <div className="wallet-val" style={{ color: "#f97316", fontSize: "1.8rem" }}>—</div>
-              <div className="wallet-sub">Complete matches to earn reputation</div>
-              <div style={{ marginTop: "1.25rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                {[{l:"Matches completed",v:"0"},{l:"Connections made",v:"0"},{l:"Hackathons joined",v:"0"}].map(r => (
-                  <div key={r.l} style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: "0.75rem" }}>
-                    <span style={{ color: "var(--muted)", fontWeight: 500 }}>{r.l}</span>
-                    <span style={{ fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{r.v}</span>
+        <div id="tokens" className="wallet-section">
+          <div className="section-eyebrow">Gemini updates</div>
+          <h2 className="section-title">Your <em>Tokens</em></h2>
+          <p className="section-sub" style={{ marginBottom: "1.5rem", fontSize: "0.88rem", color: "var(--muted)", maxWidth: "520px" }}>
+            One token for each time you’ve updated your Gemini data. Your gallery grows with every upload.
+          </p>
+          <div className="token-gallery">
+            {(() => {
+              const history = (profile?.upload_history ?? []) as UploadToken[];
+              const fromStorage = uploadedAt && history.length === 0 ? [{ at: uploadedAt.toISOString() }] : history;
+              if (fromStorage.length === 0) {
+                return (
+                  <div className="token-gallery-empty">
+                    <img src="/DFScoin.png" alt="" className="token-gallery-empty-icon" />
+                    <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>No tokens yet</div>
+                    <div style={{ fontSize: "0.78rem", color: "var(--muted)", lineHeight: 1.5, textAlign: "center", maxWidth: 280 }}>
+                      Upload your Gemini data above to earn your first token. Each update adds another to this gallery.
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="wallet-card-full">
-              <div className="wallet-lbl" style={{ marginBottom: "1rem" }}>Transaction History</div>
-              <div className="wallet-empty">
-                <div className="wallet-empty-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--v2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 12h.01"/></svg></div>
-                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>No transactions yet</div>
-                <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>Connect your wallet and complete matches to see activity</div>
-              </div>
-            </div>
+                );
+              }
+              return fromStorage
+                .slice()
+                .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+                .map((t, i) => {
+                  const d = new Date(t.at);
+                  return (
+                    <button
+                      key={`${t.at}-${i}`}
+                      type="button"
+                      className="token-card"
+                      onClick={() => { setActiveTab("chart"); document.getElementById("chart-card")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}
+                    >
+                      <div className="token-card-glow" />
+                      <img src="/DFScoin.png" alt="" className="token-card-coin" />
+                      <div className="token-card-date">{d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                      <div className="token-card-label">Gemini update</div>
+                    </button>
+                  );
+                });
+            })()}
           </div>
         </div>
       </main>
