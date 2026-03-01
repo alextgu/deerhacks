@@ -8,7 +8,7 @@ export function AuthButton() {
 
   if (isLoading) {
     return (
-      <span className="text-sm text-zinc-500 dark:text-zinc-400">
+      <span className="text-sm text-zinc-500">
         Loading...
       </span>
     );
@@ -31,13 +31,13 @@ export function AuthButton() {
               />
             </>
           )}
-          <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          <span className="text-sm font-medium text-zinc-900">
             {name}
           </span>
         </div>
         <a
           href="/auth/logout"
-          className="rounded-full border border-black/[.08] px-4 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-white/[.08]"
+          className="rounded-full border px-4 py-2 text-sm font-medium border-border hover:bg-black-04"
         >
           Logout
         </a>
@@ -48,7 +48,7 @@ export function AuthButton() {
   return (
     <a
       href="/auth/login"
-      className="rounded-full bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+      className="btn-login"
     >
       Login
     </a>

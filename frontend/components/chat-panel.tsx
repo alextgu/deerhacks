@@ -124,7 +124,7 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center rounded-lg border border-border bg-muted/30 p-8">
+      <div className="flex flex-1 items-center justify-center rounded-lg border border-border bg-muted-30 p-8">
         <p className="text-sm text-muted-foreground">Loading messages…</p>
       </div>
     );
@@ -132,7 +132,7 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
 
   if (error && messages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center rounded-lg border border-border bg-muted/30 p-8">
+      <div className="flex flex-1 items-center justify-center rounded-lg border border-border bg-muted-30 p-8">
         <p className="text-sm text-destructive">{error}</p>
       </div>
     );
@@ -154,7 +154,7 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
               className={`mb-2 flex ${isOwn ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                className={`max-w-85 rounded-lg px-3 py-2 text-sm ${
                   isOwn
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-foreground"
@@ -174,14 +174,16 @@ export function ChatPanel({ matchId, currentUserId }: ChatPanelProps) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
           placeholder="Type a message…"
-          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-ring focus:ring-2"
+          className="flex-1-input rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
+          style={sending ? { opacity: 0.5 } : undefined}
           disabled={sending}
         />
         <button
           type="button"
           onClick={handleSend}
           disabled={sending || !input.trim()}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-90"
+          style={sending || !input.trim() ? { opacity: 0.5 } : undefined}
         >
           {sending ? "Sending…" : "Send"}
         </button>

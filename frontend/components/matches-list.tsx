@@ -60,6 +60,7 @@ export function MatchesList() {
         {matches.map((m) => (
           <button
             key={m.id}
+            type="button"
             onClick={() => setOpenMatch(m)}
             className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted"
           >
@@ -67,12 +68,14 @@ export function MatchesList() {
               <p className="truncate text-sm font-medium text-foreground">
                 {m.match_blurb ?? "New match"}
               </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" style={{ marginTop: "0.125rem" }}>
                 {m.status ?? "pending"}
               </p>
             </div>
             <svg
-              className="ml-2 h-4 w-4 shrink-0 text-muted-foreground"
+              className="ml-2 shrink-0 text-muted-foreground"
+              width="16"
+              height="16"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"

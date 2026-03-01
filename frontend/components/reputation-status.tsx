@@ -47,7 +47,7 @@ export function ReputationStatus() {
         <button
           type="button"
           onClick={clearError}
-          className="text-xs text-red-600 dark:text-red-400"
+          className="text-xs text-red-600"
         >
           {error} (dismiss)
         </button>
@@ -55,10 +55,10 @@ export function ReputationStatus() {
       {loading ? (
         <span className="text-sm text-zinc-500">Loading reputation…</span>
       ) : identity ? (
-        <span className="text-sm text-zinc-600 dark:text-zinc-400">
+        <span className="text-sm text-zinc-600">
           Karma: <strong>{identity.karma}</strong>
           {identity.isFlagged && (
-            <span className="ml-1 text-amber-600 dark:text-amber-400">
+            <span className="ml-1 text-amber-600">
               (flagged)
             </span>
           )}
@@ -68,7 +68,8 @@ export function ReputationStatus() {
           type="button"
           onClick={handleCreateIdentity}
           disabled={txPending}
-          className="text-sm font-medium text-zinc-600 underline disabled:opacity-50 dark:text-zinc-400"
+          className="text-sm font-medium text-zinc-600 underline"
+          style={txPending ? { opacity: 0.5 } : undefined}
         >
           {txPending ? "Creating…" : "Create on-chain identity"}
         </button>

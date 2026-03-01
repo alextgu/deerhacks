@@ -32,12 +32,12 @@ export function ChatModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black-50 backdrop-blur-sm"
         onClick={onClose}
       />
 
       {/* modal */}
-      <div className="relative flex h-[min(85vh,700px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+      <div className="relative flex h-min-85 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
         {/* header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="min-w-0 flex-1">
@@ -45,14 +45,16 @@ export function ChatModal({
               Chat with your match
             </h2>
             {matchBlurb && (
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              <p className="truncate text-xs text-muted-foreground" style={{ marginTop: "0.125rem" }}>
                 {matchBlurb}
               </p>
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="ml-3 flex shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            style={{ width: "2rem", height: "2rem" }}
           >
             <svg
               width="16"
