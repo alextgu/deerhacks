@@ -6,7 +6,7 @@
 
 ## What it does
 
-- **Upload Gemini data** — Export your [Gemini Apps Activity](https://takeout.google.com) (JSON). We build a 6-axis interest profile (Creativity, Logic, Social, Tech, Writing, Science) and never store raw messages.
+- **Upload Gemini data** — Export your [Gemini Apps Activity](https://takeout.google.com) (JSON). We build a 6-axis interest profile (Cognitive, Emotional, Collaboration, Communication, Motivation, Lifestyle) and never store raw messages.
 - **Find matches** — Set your intent (Hackathon partner, Friend, Co-founder, etc.) and get ranked matches via vector similarity (Snowflake).
 - **Chat** — Open a private chat with a match. Chats expire after 10 minutes or when both users end the conversation; messages and match rows are deleted.
 - **Token gallery** — Each time you update your Gemini data you earn a token. Your gallery shows every update; clicking a token opens your spider chart.
