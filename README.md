@@ -1,6 +1,6 @@
 # Depth First Social (DFS)
 
-**Connect through shared thinking.** Match with people who think like you using your Gemini conversation history — no swiping, no quizzes. Built at DeerHacks 2025.
+**Connect through shared thinking.** Match with people who think like you using your Gemini conversation history — no swiping, no quizzes. Built at DeerHacks 2026.
 
 ---
 
