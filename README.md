@@ -108,4 +108,4 @@ Runs at **http://localhost:8000**. Used for archetype vector upsert (`POST /v2/a
 
 ## License
 
-MIT. Built at DeerHacks 2025.
+MIT. Built at DeerHacks 2026.
